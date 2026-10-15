@@ -1,0 +1,4 @@
+# Troque pelo seu domínio (ex.: um subdomínio gratuito de DuckDNS apontando para seu IP público).
+livekit.seu-dominio.example {
+	reverse_proxy livekit:7880
+}

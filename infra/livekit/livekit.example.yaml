@@ -1,0 +1,24 @@
+# Copie para livekit.yaml (ignorado pelo git) e ajuste. NUNCA commite chaves reais.
+port: 7880
+log_level: info
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # Cenário LAN (teste em casa): descomente e coloque o IP LAN do PC, e desligue use_external_ip.
+  # node_ip: 192.168.0.10
+  # Cenário Internet: o servidor descobre o IP público via STUN. Exige IP público (sem CGNAT).
+  use_external_ip: true
+
+# Gere um par com:  docker run --rm livekit/livekit-server generate-keys
+keys:
+  TROQUE_ESTA_CHAVE: TROQUE_ESTE_SEGREDO_COM_32+_CARACTERES
+
+# TURN embutido: ajuda clientes atrás de NAT restritivo (precisa de domínio + certificado).
+turn:
+  enabled: false
+  # domain: turn.seu-dominio.com
+  # tls_port: 5349
+  # udp_port: 3478
+  # cert_file / key_file: certificado do domínio acima

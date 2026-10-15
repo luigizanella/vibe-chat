@@ -1,0 +1,36 @@
+# LiveKit auto-hospedado (opção B). Veja docs/LIVEKIT.md ANTES de usar:
+# exige rede/portas configuradas; sem isso só funciona na sua rede local (LAN).
+#
+#   cp livekit.example.yaml livekit.yaml   # edite chaves e IP
+#   docker compose up -d
+#
+# Windows (Docker Desktop): não há "network_mode: host" real, então as portas são publicadas
+# explicitamente. Mantenha a faixa UDP pequena (igual à de livekit.yaml) e libere no firewall/roteador.
+services:
+  livekit:
+    image: livekit/livekit-server:v1.9
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880"            # sinalização HTTP/WebSocket (atrás do Caddy em produção)
+      - "7881:7881"            # WebRTC sobre TCP (fallback)
+      - "3478:3478/udp"        # TURN/UDP embutido
+      - "50000-50100:50000-50100/udp"   # mídia WebRTC (RTP)
+
+  # HTTPS/WSS automático (necessário se o app web é servido por https). Requer domínio apontando
+  # para seu IP público + portas 80/443 abertas. Remova se for usar apenas na LAN.
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    profiles: ["tls"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  caddy_data:

@@ -1,0 +1,15 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.local
+src-tauri/target
+src-tauri/gen
+infra/livekit/livekit.yaml
+infra/livekit/.env
+supabase/.temp
+supabase/.branches
+.DS_Store
+*.log
