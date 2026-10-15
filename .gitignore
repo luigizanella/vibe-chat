@@ -17,3 +17,5 @@ supabase/.branches
 supabase/.secrets.env
 *.key
 src-tauri/.updater-private.key
+
+.tokens.env
