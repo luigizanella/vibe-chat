@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useSession } from '@/store/session'
+import { isTauri } from '@/lib/env'
 import { ContextMenuHost, ModalHost, ToastHost, TooltipHost } from '@/components/ui'
 import { ProfileCardHost } from '@/components/ProfileCard'
 import { ForgotPasswordPage, LoginPage, OnboardingPage, RegisterPage, RequireAuth, ResetPasswordPage } from '@/pages/Auth'
@@ -9,6 +10,7 @@ import { AppShell } from '@/pages/AppShell'
 import { DmPage, FriendsPage } from '@/pages/HomePages'
 import { ServerPage } from '@/pages/ServerPage'
 import { InvitePage } from '@/pages/InvitePage'
+import { DownloadPage } from '@/pages/DownloadPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,13 +24,20 @@ function SessionBoot() {
   return null
 }
 
+function Home() {
+  const phase = useSession((s) => s.phase)
+  if (isTauri || phase === 'ready') return <Navigate to="/app/@me" replace />
+  return <DownloadPage />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionBoot />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/app/@me" replace />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/download" element={<DownloadPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot" element={<ForgotPasswordPage />} />

@@ -11,6 +11,7 @@ import { playSound } from '@/lib/sounds'
 import { useSettings } from '@/store/settings'
 import { toast } from '@/store/ui'
 import { fetchVoiceToken } from '@/store/voice'
+import { checkForUpdate } from '@/lib/updater'
 import { qk, useNotifPrefs, useServers } from '@/data/queries'
 import { SettingRow, Toggle, Spinner } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
@@ -176,6 +177,7 @@ export function DesktopTab() {
   }
   return (
     <div className="max-w-xl"><H>Aplicativo</H>
+      <SettingRow title="Versão" description={`Vibe Chat ${APP_VERSION}`}><button className="btn btn-sm" onClick={() => void checkForUpdate(false)}>Procurar atualização</button></SettingRow>
       <SettingRow title="Iniciar junto com o Windows"><Toggle checked={!!auto} disabled={auto === null} onChange={(v) => void toggleAuto(v)} label="Iniciar com o Windows" /></SettingRow>
       <SettingRow title="Minimizar para a bandeja ao fechar" description="O app continua em segundo plano; use o ícone da bandeja para sair de vez."><Toggle checked={d.closeToTray} onChange={(v) => void setTray(v)} label="Minimizar para a bandeja" /></SettingRow>
     </div>

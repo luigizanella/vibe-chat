@@ -26,6 +26,8 @@
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-autostart": "^2.7.0",
     "@tauri-apps/plugin-notification": "^2.7.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.0",
     "clsx": "^2.1.1",
     "livekit-client": "^2.22.4",
     "lucide-react": "^1.57.0",

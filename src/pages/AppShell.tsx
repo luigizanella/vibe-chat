@@ -14,6 +14,7 @@ import { matchCombo, isTypingTarget } from '@/lib/keys'
 import { notificationPermission, requestNotificationPermission, setUnreadTitle } from '@/lib/notify'
 import { rpc } from '@/lib/supabase'
 import { isTauri } from '@/lib/env'
+import { checkForUpdate } from '@/lib/updater'
 import { Avatar, Modal, useCloseModal } from '@/components/ui'
 import { ServerRail } from '@/components/shell/ServerRail'
 import { ChannelSidebar } from '@/components/shell/ChannelSidebar'
@@ -204,6 +205,9 @@ export function AppShell() {
     if (!isTauri) return
     void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_close_to_tray', { enabled: closeToTray })).catch(() => undefined)
   }, [closeToTray])
+
+  // aplicativo desktop: procura atualização ao abrir
+  useEffect(() => void checkForUpdate(true), [])
 
   // contador de não lidas no título da janela
   useEffect(() => {

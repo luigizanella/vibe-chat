@@ -13,3 +13,7 @@ supabase/.temp
 supabase/.branches
 .DS_Store
 *.log
+
+supabase/.secrets.env
+*.key
+src-tauri/.updater-private.key
