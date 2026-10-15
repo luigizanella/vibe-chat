@@ -157,4 +157,4 @@ export interface NotifPref {
 }
 
 export const MESSAGE_SELECT =
-  '*, author:profiles!messages_author_id_fkey(id,username,display_name,avatar_path), attachments(*), reactions(*), reply:messages!messages_reply_to_id_fkey(id,content,author_id)'
+  '*, author:profiles!author_id(id,username,display_name,avatar_path), attachments(*), reactions(*), reply:reply_to_id(id,content,author_id)'

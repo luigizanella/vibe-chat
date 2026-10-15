@@ -320,7 +320,6 @@ export const useVoice = create<VoiceState>((set, get) => {
         set({ status: 'connected', error: null })
         sync()
       })
-      .on(RoomEvent.MediaDevicesError, (e) => handleMediaError(e, 'mídia'))
       .on(RoomEvent.MediaDevicesChanged, touch)
       .on(RoomEvent.AudioPlaybackStatusChanged, () => {
         if (!room.canPlaybackAudio) void room.startAudio().catch(() => undefined)

@@ -18,20 +18,26 @@ export interface MessagesState {
 }
 export const messagesKey = (s: Scope) => ['messages', scopeKey(s)] as const
 
+/** O embed da resposta deve ser um objeto; protege contra a forma em lista. */
+function normalize(m: Message): Message {
+  const r = m.reply as unknown
+  return { ...m, reply: Array.isArray(r) ? (r[0] ?? null) : m.reply }
+}
+
 export async function fetchPage(scope: Scope, before?: string): Promise<{ items: Message[]; hasMore: boolean }> {
   let q = supabase.from('messages').select(MESSAGE_SELECT).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(PAGE + 1)
   q = scope.kind === 'channel' ? q.eq('channel_id', scope.id) : q.eq('dm_id', scope.id)
   if (before) q = q.lt('created_at', before)
   const { data, error } = await q
   if (error) throw error
-  const rows = (data ?? []) as unknown as Message[]
+  const rows = ((data ?? []) as unknown as Message[]).map(normalize)
   const hasMore = rows.length > PAGE
   return { items: rows.slice(0, PAGE).reverse(), hasMore }
 }
 
 export async function fetchMessage(id: string): Promise<Message | null> {
   const { data } = await supabase.from('messages').select(MESSAGE_SELECT).eq('id', id).maybeSingle()
-  return (data as unknown as Message | null) ?? null
+  return data ? normalize(data as unknown as Message) : null
 }
 
 export function useMessages(scope: Scope | null) {
