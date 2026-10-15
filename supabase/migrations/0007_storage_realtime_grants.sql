@@ -33,7 +33,6 @@ end $$;
 do $$
 begin
   if to_regclass('realtime.messages') is not null then
-    execute 'alter table realtime.messages enable row level security';
     execute 'drop policy if exists vibe_rt_read on realtime.messages';
     execute 'drop policy if exists vibe_rt_write on realtime.messages';
     execute $p$create policy vibe_rt_read on realtime.messages for select to authenticated
