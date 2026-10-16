@@ -67,6 +67,7 @@ interface VoiceState {
   serverDeafened: boolean
   setServerFlags: (muted: boolean, deafened: boolean) => void
   join: (t: VoiceTarget, watch?: string) => Promise<void>
+  joinInner: (t: VoiceTarget, watch?: string) => Promise<void>
   /** Quem você está assistindo (transmissão de tela); só essa é baixada. */
   /** O navegador bloqueou o áudio da chamada até um clique (Safari/iOS). */
   audioBlocked: boolean
@@ -119,6 +120,7 @@ async function measureRtt(room: Room): Promise<number | null> {
 let pingTimer: ReturnType<typeof setInterval> | undefined
 
 let gate: MicChain | null = null
+let joiningId: string | null = null
 let audioContainer: HTMLDivElement | null = null
 let userLeft = false
 let retries = 0
@@ -509,6 +511,16 @@ export const useVoice = create<VoiceState>((set, get) => {
 
     join: async (target, watch) => {
       if (get().channelId === target.id && get().status !== 'failed') return
+      if (joiningId === target.id) return // já conectando a esta sala (duplo clique, remontagem de efeito): UMA instância de Room
+      joiningId = target.id
+      try {
+        await get().joinInner(target, watch)
+      } finally {
+        joiningId = null
+      }
+    },
+
+    joinInner: async (target, watch) => {
       if (get().room) await get().leave()
       userLeft = false
       retries = 0

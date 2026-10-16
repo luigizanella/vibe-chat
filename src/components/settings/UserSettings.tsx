@@ -78,7 +78,7 @@ export function UserSettingsModal({ initialTab = 'account' }: { initialTab?: Use
   })()
 
   return (
-    <dialog ref={ref} className="modal" data-size="lg" style={{ width: 'min(94vw, 1180px)', maxWidth: 'min(94vw, 1180px)', height: 'min(88vh, 820px)' }} onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label="Configurações">
+    <dialog ref={ref} className="modal settings-user" onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label="Configurações">
       <div className="flex h-full bg-primary text-fg max-sm:flex-col">
         <nav className="flex shrink-0 flex-col gap-1 overflow-y-auto border-b border-border bg-secondary p-3 sm:w-72 sm:border-r sm:border-b-0" aria-label="Configurações">
           {profile && (
@@ -111,9 +111,9 @@ export function UserSettingsModal({ initialTab = 'account' }: { initialTab?: Use
             <LogOut size={16} />Sair
           </button>
         </nav>
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary p-5 text-fg sm:px-12 sm:py-10" aria-label={current?.label}>
-          <button className="icon-btn absolute top-3 right-3" onClick={close} aria-label="Fechar" data-tip="Fechar (Esc)"><X size={20} /></button>
-          {content}
+        <section className="relative min-h-0 min-w-0 flex-1 bg-primary text-fg" aria-label={current?.label}>
+          <button className="icon-btn absolute top-3 right-4 z-10" onClick={close} aria-label="Fechar" data-tip="Fechar (Esc)"><X size={20} /></button>
+          <div className="h-full overflow-y-auto overscroll-contain p-5 sm:px-12 sm:py-8">{content}</div>
         </section>
       </div>
     </dialog>

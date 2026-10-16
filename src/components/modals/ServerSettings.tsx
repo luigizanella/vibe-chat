@@ -30,8 +30,7 @@ function ServerSettingsFrame({ title, groups, tab, setTab, onDelete, wide, child
     ref.current?.showModal()
   }, [])
   return (
-    <dialog ref={ref} className="modal" aria-label={`Configurações de ${title}`} onClose={close} onCancel={(e) => { e.preventDefault(); close() }}
-      style={{ width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, border: 0 }}>
+    <dialog ref={ref} className="modal settings-full" aria-label={`Configurações de ${title}`} onClose={close} onCancel={(e) => { e.preventDefault(); close() }}>
       <div className="flex h-full bg-primary text-fg max-md:flex-col">
         <nav className="flex shrink-0 flex-col overflow-y-auto border-b border-border bg-secondary p-3 md:w-72 md:border-r md:border-b-0 md:px-4 md:py-8" aria-label="Seções">
           <div className="mx-auto flex w-full max-w-[250px] flex-col gap-0.5 max-md:max-w-none">
@@ -52,7 +51,7 @@ function ServerSettingsFrame({ title, groups, tab, setTab, onDelete, wide, child
             )}
           </div>
         </nav>
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary px-5 py-8 text-fg md:px-14 md:py-12">
+        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-primary px-5 py-8 text-fg md:px-14 md:py-12">
           <div className="fixed top-6 right-8 z-10 flex flex-col items-center gap-1 max-md:top-3 max-md:right-3">
             <button className="grid h-9 w-9 place-items-center rounded-full border-2 border-fg-muted bg-transparent text-fg-2 hover:bg-[var(--bg-hover)] hover:text-fg" onClick={close} aria-label="Fechar configurações"><X size={18} /></button>
             <span className="text-[11px] font-bold text-fg-muted max-md:hidden">ESC</span>

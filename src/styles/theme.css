@@ -426,8 +426,29 @@ dialog.modal {
   max-width: min(92vw, 480px);
   width: 100%;
   max-height: 90vh;
+  max-height: calc(100dvh - 24px); /* dvh: respeita a barra do navegador (Safari/Mac) */
   overflow: hidden;
   animation: pop-in var(--dur) var(--ease);
+}
+/* Configurações do usuário: grande, mas nunca maior que a janela visível */
+dialog.modal.settings-user {
+  width: min(94vw, 1180px);
+  max-width: none;
+  height: min(88vh, 820px);
+  height: min(88dvh, 820px);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+}
+/* Configurações do servidor: tela cheia (dvh + áreas seguras) */
+dialog.modal.settings-full {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 dialog.modal[data-size='lg'] {
   max-width: min(96vw, 760px);

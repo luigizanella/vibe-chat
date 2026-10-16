@@ -15,3 +15,8 @@ createRoot(document.getElementById('root')!).render(
     {Mini ? <Mini /> : Demo ? <Demo n={Math.max(1, Math.min(40, Number(demo) || 2))} /> : <App />}
   </StrictMode>,
 )
+
+// Instalar como aplicativo (PWA): service worker mínimo, só no site publicado e fora do app desktop.
+if (import.meta.env.PROD && 'serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
+  window.addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => undefined))
+}

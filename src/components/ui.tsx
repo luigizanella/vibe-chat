@@ -142,7 +142,7 @@ export function Modal({
         if (e.target === ref.current) close()
       }}
     >
-      <div className="flex max-h-[90vh] flex-col bg-primary text-fg">
+      <div className="flex max-h-[calc(100dvh-3rem)] flex-col bg-primary text-fg">
         <header className="flex items-start justify-between gap-4 px-5 pt-5">
           <div>
             <h2 id={titleId} className="m-0 text-xl font-bold">{title}</h2>

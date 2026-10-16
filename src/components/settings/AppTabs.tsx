@@ -10,7 +10,9 @@ import { notificationPermission, requestNotificationPermission, type NotifPermis
 import { playSound } from '@/lib/sounds'
 import { useSettings } from '@/store/settings'
 import { toast } from '@/store/ui'
-import { fetchVoiceToken } from '@/store/voice'
+import { fetchVoiceToken, useVoice } from '@/store/voice'
+import { browserInfo, diag, getVozLog } from '@/lib/diag'
+import { queryMediaPermissions } from '@/lib/mediaErrors'
 import { checkForUpdate } from '@/lib/updater'
 import { qk, useNotifPrefs, useServers } from '@/data/queries'
 import { SettingRow, Toggle, Spinner } from '@/components/ui'
@@ -181,6 +183,40 @@ type Check = { label: string; state: 'run' | 'ok' | 'warn' | 'fail'; detail: str
 export function DiagnosticsTab() {
   const [checks, setChecks] = useState<Check[]>([])
   const [running, setRunning] = useState(false)
+  const [, setChecksDone] = useState<Check[]>([])
+  const v = useVoice()
+  const [perms, setPerms] = useState<{ microphone: string; camera: string } | null>(null)
+  useEffect(() => void queryMediaPermissions().then(setPerms), [])
+
+  /** Relatório em texto para o amigo copiar e mandar. */
+  const report = () => {
+    const b = browserInfo()
+    const codecs = (() => {
+      try {
+        return (RTCRtpSender.getCapabilities('video')?.codecs ?? []).map((c) => c.mimeType.replace('video/', '')).filter((x, i, a) => a.indexOf(x) === i).join(', ')
+      } catch {
+        return 'indisponível'
+      }
+    })()
+    const L = [
+      `Vibe Chat ${APP_VERSION} (build ${BUILD_TIME})`,
+      `Navegador: ${b.browser} · Sistema: ${b.os} · ${isTauri ? 'app desktop' : 'navegador'}`,
+      `Tela: ${window.innerWidth}x${window.innerHeight} @${window.devicePixelRatio}x · Idioma: ${navigator.language}`,
+      `Online: ${navigator.onLine} · HTTPS: ${window.isSecureContext}`,
+      `Permissões: microfone ${perms?.microphone ?? '?'}, câmera ${perms?.camera ?? '?'}`,
+      `Recursos: getDisplayMedia ${typeof navigator.mediaDevices?.getDisplayMedia === 'function'}, AudioWorklet ${typeof AudioWorkletNode !== 'undefined'}, JanelaFlutuante ${'documentPictureInPicture' in window}, WebRTC ${typeof RTCPeerConnection !== 'undefined'}`,
+      `Codecs de vídeo: ${codecs}`,
+      `Voz: estado ${v.status}, sala ${v.room?.state ?? '-'}, canal ${v.channelId ?? '-'}, ping ${v.ping ?? '-'} ms, áudio bloqueado ${v.audioBlocked}, cadeia do microfone ${v.micChain ?? '-'}`,
+      `Último erro de voz: ${diag.lastError ?? '-'}`,
+      `Última desconexão: ${diag.lastDisconnect ?? '-'}`,
+      `Erro ao compartilhar tela: ${diag.screenError ?? '-'}`,
+      '--- Verificações ---',
+      ...checks.map((c) => `[${c.state}] ${c.label}: ${c.detail}`),
+      '--- Eventos recentes da chamada ---',
+      ...getVozLog().slice(-30).map((e) => `${new Date(e.t).toLocaleTimeString('pt-BR')} ${e.msg}`),
+    ]
+    return L.join('\n')
+  }
 
   const run = async () => {
     setRunning(true)
@@ -233,6 +269,7 @@ export function DiagnosticsTab() {
     const np = await notificationPermission()
     push({ label: 'Notificações', state: np === 'granted' ? 'ok' : 'warn', detail: np })
     setRunning(false)
+    setChecksDone(out)
   }
 
   const first = useRef(true)
@@ -246,7 +283,22 @@ export function DiagnosticsTab() {
   return (
     <div className="max-w-2xl">
       <H>Diagnóstico de conexão</H>
-      <button className="btn btn-primary mb-4" onClick={() => void run()} disabled={running}>{running && <Spinner size={14} />} Executar novamente</button>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button className="btn btn-primary" onClick={() => void run()} disabled={running}>{running && <Spinner size={14} />} Executar novamente</button>
+        <button className="btn" onClick={() => void navigator.clipboard.writeText(report()).then(() => toast.success('Relatório copiado. Cole numa conversa para enviar.'))}>Copiar relatório</button>
+      </div>
+      <div className="mb-4 rounded-lg border border-border bg-secondary p-3 text-sm">
+        <div className="mb-1 font-semibold">Chamada de voz</div>
+        <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs text-fg-2">
+          <dt>Estado</dt><dd>{v.status}{v.room ? ` (LiveKit: ${v.room.state})` : ''}</dd>
+          <dt>Ping</dt><dd>{v.ping !== null ? ` ms` : '—'}</dd>
+          <dt>Último erro</dt><dd>{diag.lastError ?? v.error ?? '—'}</dd>
+          <dt>Última desconexão</dt><dd>{diag.lastDisconnect ?? '—'}</dd>
+          <dt>Compartilhar tela</dt><dd>{diag.screenError ?? '—'}</dd>
+          <dt>Navegador</dt><dd>{browserInfo().browser} em {browserInfo().os}</dd>
+          <dt>Permissões</dt><dd>microfone: {perms?.microphone ?? '?'} · câmera: {perms?.camera ?? '?'}</dd>
+        </dl>
+      </div>
       <ul className="m-0 list-none p-0">
         {checks.map((c) => (
           <li key={c.label} className="flex items-start gap-3 border-b border-border py-2.5">

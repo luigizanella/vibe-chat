@@ -39,3 +39,35 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+  # macOS (.dmg universal). EXPERIMENTAL: sem assinatura/notarização da Apple o Gatekeeper bloqueia o primeiro abrir
+  # (clique direito > Abrir). Se este job falhar, o instalador do Windows e o restante da release NÃO são afetados.
+  macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ secrets.VITE_PUBLIC_APP_URL }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Vibe Chat ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
+          args: --target universal-apple-darwin --bundles dmg
