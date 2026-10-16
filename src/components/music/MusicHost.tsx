@@ -185,7 +185,7 @@ function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId
   // mantém o player sempre dentro da tela (posição salva de outra janela, expandir/minimizar, redimensionar)
   useLayoutEffect(() => {
     if (float && pos) setPos((p) => (p ? clamp(p.x, p.y) : p))
-  }, [minimized, float]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [minimized, float])
 
   useEffect(() => {
     if (!float) return
@@ -249,7 +249,8 @@ function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId
         <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-wide text-fg-muted uppercase">
           Vibe Beats <span className="rounded bg-[var(--accent)] px-1 text-[10px] text-[var(--accent-contrast)]">APP</span>
         </span>
-        {float && hasDocPip && onPip && <button className="icon-btn h-7 w-7" aria-label="Abrir em janela flutuante" data-tip="Janela flutuante (fica visível ao trocar de app)" onClick={onPip}><PictureInPicture2 size={14} /></button>}
+        {float && hasDocPip && onPip && <button className="btn btn-sm h-7 gap-1 px-2 text-xs" aria-label="Destacar em janela flutuante" data-tip="Fica visível ao trocar de aba ou app" onClick={onPip}><PictureInPicture2 size={13} /> Destacar</button>}
+        {float && !hasDocPip && !isTauri && <span className="text-[10px] text-fg-muted" title="Este navegador não tem janela flutuante. Use Chrome ou Edge, ou o app para Windows.">sem janela flutuante</span>}
         {float && !hasDocPip && isTauri && <button className={`icon-btn h-7 w-7 ${pinned ? 'active' : ''}`} aria-pressed={pinned} aria-label="Manter o app por cima de outras janelas" data-tip={pinned ? 'Desafixar o app' : 'Manter o app por cima das outras janelas'} onClick={() => void togglePin()}><Pin size={14} /></button>}
         {float && <button className="icon-btn h-7 w-7" aria-label={minimized ? 'Expandir player' : 'Minimizar player'} data-tip={minimized ? 'Expandir' : 'Minimizar'} onClick={toggleMin}>{minimized ? <Plus size={14} /> : <Minus size={14} />}</button>}
         {!float && onPipClose && <button className="icon-btn h-7 w-7" aria-label="Voltar para a janela do app" data-tip="Voltar para o app" onClick={onPipClose}><X size={14} /></button>}
@@ -329,6 +330,42 @@ export function MusicHost() {
       toast.error('Não foi possível abrir a janela flutuante.')
     }
   }
+
+  // janela flutuante automática ao trocar de aba/app (Chrome/Edge: via Media Session; sem gesto o navegador pode recusar)
+  const openRef = useRef(openPip)
+  openRef.current = openPip
+  useEffect(() => {
+    if (!active || isTauri) return
+    try {
+      navigator.mediaSession?.setActionHandler('enterpictureinpicture' as MediaSessionAction, () => void openRef.current())
+    } catch {
+      /* ação não suportada neste navegador */
+    }
+    return () => {
+      try { navigator.mediaSession?.setActionHandler('enterpictureinpicture' as MediaSessionAction, null) } catch { /* nada */ }
+    }
+  }, [active])
+
+  // app desktop: mini janela sempre no topo quando a janela principal perde o foco
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const volume = useSettings((s) => s.settings.musicVolume)
+  const volRef = useRef(volume)
+  volRef.current = volume
+  const getMini = () => ({ title: sessionRef.current?.title ?? 'Vibe Beats', playing: sessionRef.current?.status === 'playing', volume: volRef.current })
+  useEffect(() => {
+    if (!isTauri || !active || !channelId) return
+    let off: (() => void) | undefined
+    let dead = false
+    void import('@/lib/miniWindow').then((m) => m.attachMiniWindow(channelId, getMini)).then((f) => (dead ? f() : (off = f)), () => undefined)
+    return () => {
+      dead = true
+      off?.()
+    }
+  }, [active, channelId])
+  useEffect(() => {
+    if (isTauri && active) void import('@tauri-apps/api/event').then((e) => e.emit('music-state', getMini()))
+  }, [active, session?.title, session?.status, volume])
 
   if (!active) return null
   if (pip) return createPortal(<PlayerCard key={`pip-${channelId}`} channelId={channelId} session={session} mode="pip" onPipClose={() => { pip.close(); setPip(null) }} />, pip.document.body)
