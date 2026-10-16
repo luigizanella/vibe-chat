@@ -12,7 +12,8 @@ import { hasPerm } from '@/lib/perms'
 import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useUnread } from '@/data/queries'
 import { findPref, markChannelsRead, setNotifPref } from '@/data/actions'
 import { useVoiceOccupants } from '@/data/presence'
-import { useServerMusic } from '@/data/music'
+import { MUSIC_BOT_ID, useServerMusic } from '@/data/music'
+import { useVoiceMove } from '@/data/voiceMove'
 import { useUI, toast } from '@/store/ui'
 import { useVoice } from '@/store/voice'
 import { Avatar, CenterSpinner, confirmAction } from '@/components/ui'
@@ -49,11 +50,12 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const openProfile = useUI((s) => s.openProfile)
   const userMenu = useUserMenu(serverId)
   const localNick = useLocalNick()
+  const mv = useVoiceMove(serverId)
   const { data: sessions } = useServerMusic(ch.kind === 'voice' ? serverId : undefined)
   const playing = sessions?.find((x) => x.channel_id === ch.id && x.status !== 'idle')
   const Icon = ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={clsx(mv.overId === ch.id && 'rounded-md bg-[var(--bg-selected)] ring-2 ring-[var(--accent)]')} {...mv.dropProps(ch)}>
       <div className="group relative" onContextMenu={onContext}>
         <button
           {...attributes}
@@ -77,11 +79,13 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
       {ch.kind === 'voice' && (occupants.length > 0 || playing) && (
         <ul className="m-0 mb-1.5 list-none p-0 pl-8">
           {playing && (
-            <li className="flex h-8 items-center gap-2 px-2 text-fg-2" title={playing.title ?? undefined}>
-              <Avatar path="app:logo" name="Vibe Beats" id="vibe-beats" size={24} />
-              <span className="min-w-0 flex-1 truncate">Vibe Beats</span>
-              <span className="rounded bg-[var(--accent)] px-1 text-[10px] leading-4 font-bold text-[var(--accent-contrast)]">APP</span>
-              <Music size={13} className="shrink-0 text-fg-muted" aria-label="Tocando música" />
+            <li title={playing.title ?? undefined}>
+              <button className="flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-fg-2 hover:bg-[var(--bg-hover)]" onClick={(e) => openProfile(MUSIC_BOT_ID, serverId, e.clientX + 12, e.clientY - 20)}>
+                <Avatar path="app:logo" name="Vibe Beats" id="vibe-beats" size={24} />
+                <span className="min-w-0 flex-1 truncate">Vibe Beats</span>
+                <span className="rounded bg-[var(--accent)] px-1 text-[10px] leading-4 font-bold text-[var(--accent-contrast)]">APP</span>
+                <Music size={13} className="shrink-0 text-fg-muted" aria-label="Tocando música" />
+              </button>
             </li>
           )}
           {occupants.map((uid) => {
@@ -89,7 +93,7 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
             const live = voiceChannel === ch.id ? participants.find((p) => p.identity === uid) : undefined
             const name = localNick(uid, m?.nickname || m?.profile?.display_name || m?.profile?.username || 'Membro')
             return (
-              <li key={uid} onContextMenu={(e) => userMenu(uid, e)}>
+              <li key={uid} onContextMenu={(e) => userMenu(uid, e)} {...mv.dragProps(uid)}>
                 <button className="flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-fg-2 hover:bg-[var(--bg-hover)]" onClick={(e) => openProfile(uid, serverId, e.clientX + 12, e.clientY - 20)}>
                 <Avatar path={m?.profile?.avatar_path} name={name} id={uid} size={24} speaking={!!live?.speaking} />
                 <span className="min-w-0 flex-1 truncate">{name}</span>

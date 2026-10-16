@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useSession } from '@/store/session'
-import { useVoice } from '@/store/voice'
+import { expectModeratorMove, useVoice } from '@/store/voice'
 import { toast } from '@/store/ui'
 import { qk, useMembers } from './queries'
 import type { Channel } from '@/lib/types'
@@ -26,6 +26,7 @@ export function useVoiceModeration() {
     const ch = supabase.channel(`cmd:${uid}`, { config: { private: true } })
     ch.on('broadcast', { event: 'move' }, ({ payload }) => {
       const p = payload as { server_id: string; channel_id: string }
+      expectModeratorMove()
       const channels = qc.getQueryData<Channel[]>(qk.channels(p.server_id)) ?? []
       const dest = channels.find((c) => c.id === p.channel_id)
       toast.info(`Um moderador moveu você para ${dest?.name ?? 'outro canal de voz'}.`)

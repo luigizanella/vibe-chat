@@ -17,9 +17,9 @@ import { Modal, Spinner, useCloseModal } from '@/components/ui'
 import { TimeoutModal } from '@/components/modals/TimeoutModal'
 import { voiceModerate, type VoiceAction } from '@/data/voiceModeration'
 import { voiceChannelOf } from '@/data/presence'
+import { MUSIC_BOT_ID } from '@/data/music'
 import type { Channel } from '@/lib/types'
 
-const MUSIC_BOT_ID = '00000000-0000-4000-8000-00000000b075'
 
 /** Apelido local (só você vê) ou, se não houver, o nome informado. */
 export function useLocalNick() {
@@ -187,7 +187,8 @@ export function useUserMenu(serverId: string | null) {
             { kind: 'checkbox', label: 'Desativar áudio no servidor', icon: <VolumeX size={16} />, danger: true, checked: !!member.voice_deafened, disabled: !can('deafen_members'), tip: 'Sem permissão para ensurdecer (ou cargo igual/superior).', onToggle: (v) => void run(v ? 'deafen' : 'undeafen') },
             { label: 'Desconectar', icon: <DisconnectIcon size={16} />, danger: true, disabled: !can('move_members') || !inVoice, tip: !inVoice ? 'Esta pessoa não está em uma chamada.' : 'Sem permissão para desconectar membros (ou cargo igual/superior).', onClick: () => void run('disconnect') },
           )
-        }        if (!isSelf && !profile?.is_bot) {
+        }
+        if (!isSelf && !profile?.is_bot) {
           const canKick = hasPerm(ctx, 'kick_members') && outranks
           const canBan = hasPerm(ctx, 'ban_members') && outranks
           items.push(

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, MoreHorizontal, SendHorizontal } from 'lucide-react'
+import { Crown, MoreHorizontal, Music, SendHorizontal } from 'lucide-react'
 import { rpc, supabase } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/format'
@@ -10,6 +10,7 @@ import { useUI, toast } from '@/store/ui'
 import { useSession } from '@/store/session'
 import { qk, useMembers, useProfile, useRoles, useServers } from '@/data/queries'
 import { sendMessage } from '@/data/messages'
+import { MUSIC_HELP, useServerMusic } from '@/data/music'
 import { usePresenceOf } from '@/data/presence'
 import { Avatar, PRESENCE_LABEL, Spinner } from '@/components/ui'
 import { useLocalNick, useUserMenu } from '@/components/userMenu'
@@ -42,6 +43,7 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
   const userMenu = useUserMenu(serverId)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const { data: sessions } = useServerMusic(serverId ?? undefined)
 
   const { data: mutualIds } = useQuery({
     queryKey: ['mutual', userId],
@@ -98,12 +100,33 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
         <div className="rounded-lg bg-[var(--bg-primary)] p-3">
           <div className="flex items-center gap-1.5 text-xl font-bold">
             {shownName}
+            {p.is_bot && <span className="rounded bg-[var(--accent)] px-1.5 text-[11px] leading-5 font-bold text-[var(--accent-contrast)]" aria-label="Aplicativo (bot)">APP</span>}
             {isOwner && <Crown size={16} className="text-warning" aria-label="Dono do servidor" />}
           </div>
           <div className="text-fg-2">{p.username} · {PRESENCE_LABEL[status]}</div>
           {p.custom_status && <div className="mt-1 text-sm">{p.custom_status}</div>}
 
           <div className="my-3 h-px bg-[var(--border)]" />
+          {p.is_bot ? (
+            <>
+              <div className="label mb-1">Sobre</div>
+              <div className="mb-3 text-sm text-fg-2">Toca músicas do YouTube em uma chamada de voz, sincronizadas para todos. Qualquer pessoa na chamada pode usar.</div>
+              <div className="label mb-1">Como usar</div>
+              <div className="mb-3 text-sm text-fg-2">{MUSIC_HELP}</div>
+              <div className="label mb-1">Comandos do painel</div>
+              <ul className="m-0 mb-3 list-none p-0 text-sm text-fg-2">
+                <li>Adicionar link à fila</li><li>Pausar e continuar</li><li>Pular e voltar</li><li>Parar e limpar a fila</li>
+              </ul>
+              <div className="label mb-1">Tocando agora</div>
+              {(() => {
+                const playing = sessions?.filter((x) => x.status !== 'idle') ?? []
+                return playing.length === 0
+                  ? <div className="text-sm text-fg-muted">Nada tocando neste servidor.</div>
+                  : playing.map((x) => <div key={x.channel_id} className="flex items-center gap-1.5 truncate text-sm"><Music size={14} className="shrink-0" aria-hidden /><span className="truncate">{x.title}</span></div>)
+              })()}
+            </>
+          ) : (
+            <>
           {p.bio && (
             <>
               <div className="label mb-1">Sobre mim</div>
@@ -140,9 +163,11 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
               </div>
             </>
           )}
+            </>
+          )}
         </div>
 
-        {!isMe && (
+        {!isMe && !p.is_bot && (
           <div className="relative mt-3">
             <input
               className="input pr-10"

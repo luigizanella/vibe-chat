@@ -3,6 +3,7 @@ import { Clock, Crown } from 'lucide-react'
 import { highestRole } from '@/lib/perms'
 import { useReadable } from '@/lib/useReadable'
 import { useMembers, usePermCtx, useRoles } from '@/data/queries'
+import { useVoiceMove } from '@/data/voiceMove'
 import { presenceOfUser, usePresenceStore } from '@/data/presence'
 import { useSession } from '@/store/session'
 import { useUI } from '@/store/ui'
@@ -20,6 +21,7 @@ export function MemberList({ serverId }: { serverId: string }) {
   const userMenu = useUserMenu(serverId)
   const localNick = useLocalNick()
   const readable = useReadable('secondary')
+  const mv = useVoiceMove(serverId)
 
   const groups = useMemo(() => {
     if (!members || !roles) return []
@@ -63,6 +65,7 @@ export function MemberList({ serverId }: { serverId: string }) {
                 onClick={(e) => openProfile(m.user_id, serverId, e.clientX - 350, e.clientY)}
                 onContextMenu={(e) => userMenu(m.user_id, e)}
                 aria-label={`${name}, ${st}`}
+                {...mv.dragProps(m.user_id)}
               >
                 <Avatar path={m.profile?.avatar_path} name={name} id={m.user_id} size={32} status={st} ring="var(--bg-secondary)" />
                 <span className="min-w-0 leading-tight">

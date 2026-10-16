@@ -32,6 +32,9 @@ export function useMusic(channelId: string | null | undefined) {
 }
 
 /** Sessões de música do servidor (para mostrar o bot nos canais de voz que têm música tocando). */
+/** Perfil fixo do bot de música (criado pela migração). */
+export const MUSIC_BOT_ID = '00000000-0000-4000-8000-00000000b075'
+
 export function useServerMusic(serverId: string | undefined) {
   return useQuery({
     queryKey: serverMusicKey(serverId ?? ''),

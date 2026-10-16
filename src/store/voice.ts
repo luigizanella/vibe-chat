@@ -232,6 +232,12 @@ function videoRes(q: '360p' | '720p' | '1080p') {
   return q === '360p' ? VideoPresets.h360.resolution : q === '720p' ? VideoPresets.h720.resolution : VideoPresets.h1080.resolution
 }
 
+/** Janela em que uma remoção da sala é parte de um 'mover' feito por moderador (não é erro). */
+let moveUntil = 0
+export function expectModeratorMove() {
+  moveUntil = Date.now() + 8000
+}
+
 export const useVoice = create<VoiceState>((set, get) => {
   const sync = (bumpVersion = true) => {
     const room = get().room
@@ -382,6 +388,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         track_cleanup()
         stopPing()
         if (userLeft || reason === DisconnectReason.CLIENT_INITIATED) return
+        if (reason === DisconnectReason.PARTICIPANT_REMOVED && Date.now() < moveUntil) return // movido por moderador: o comando de mover reconecta no destino
         if (reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED) {
           set({ status: 'failed', error: 'Você foi removido da chamada.', room: null, channelId: null, participants: [] })
           return
