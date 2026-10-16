@@ -16,7 +16,8 @@ import { matchCombo, isTypingTarget } from '@/lib/keys'
 import { notificationPermission, requestNotificationPermission, setUnreadTitle } from '@/lib/notify'
 import { rpc } from '@/lib/supabase'
 import { isTauri } from '@/lib/env'
-import { checkForUpdate } from '@/lib/updater'
+import { startAutoUpdate } from '@/lib/updater'
+import { UpdateBanner } from '@/components/UpdateBanner'
 import { Avatar, Modal, useCloseModal } from '@/components/ui'
 import { ServerRail } from '@/components/shell/ServerRail'
 import { ChannelSidebar } from '@/components/shell/ChannelSidebar'
@@ -209,8 +210,8 @@ export function AppShell() {
     void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_close_to_tray', { enabled: closeToTray })).catch(() => undefined)
   }, [closeToTray])
 
-  // aplicativo desktop: procura atualização ao abrir
-  useEffect(() => void checkForUpdate(true), [])
+  // atualização automática: ao abrir e periodicamente (desktop: instala; web: recarrega)
+  useEffect(() => startAutoUpdate(), [])
 
   // contador de não lidas no título da janela
   useEffect(() => {
@@ -237,6 +238,7 @@ export function AppShell() {
       </div>
       <QuickSwitcher />
       <MusicHost />
+      <UpdateBanner />
     </div>
   )
 }

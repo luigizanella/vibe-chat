@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:db": "vitest run tests/db",
     "test:e2e": "node tests/e2e/supabase-smoke.mjs",
+    "release": "node scripts/release.mjs",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build"
