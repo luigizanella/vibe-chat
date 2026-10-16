@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink, Pause, Play, SkipBack, SkipForward, Square, Volume2 } from 'lucide-react'
+import { ExternalLink, GripHorizontal, Minus, Pause, PictureInPicture2, Pin, Play, Plus, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { isTauri } from '@/lib/env'
 import { controlMusic, positionMs, syncClock, useMusic } from '@/data/music'
 import { useMembers } from '@/data/queries'
 import { useSettings } from '@/store/settings'
@@ -59,8 +61,19 @@ const ERRORS: Record<number, string> = {
   153: 'O YouTube recusou o player neste ambiente.',
 }
 
+const POS_KEY = 'vibe.music.pos'
+const MIN_KEY = 'vibe.music.min'
+const PREV_VOL_KEY = 'vibe.music.prevvol'
+function readJson<T>(k: string): T | null {
+  try {
+    return JSON.parse(localStorage.getItem(k) ?? 'null') as T | null
+  } catch {
+    return null
+  }
+}
+
 /* ---------------------------------------------------------------- cartão */
-function PlayerCard({ channelId, session }: { channelId: string; session: MusicSession }) {
+function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId: string; session: MusicSession; mode: 'float' | 'pip'; onPip?: () => void; onPipClose?: () => void }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YTPlayer | null>(null)
   const loaded = useRef<string | null>(null)
@@ -159,9 +172,86 @@ function PlayerCard({ channelId, session }: { channelId: string; session: MusicS
 
   const playing = session.status === 'playing'
   const btn = 'icon-btn h-8 w-8'
+  const float = mode === 'float'
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(() => readJson<{ x: number; y: number }>(POS_KEY))
+  const [minimized, setMinimized] = useState(() => localStorage.getItem(MIN_KEY) === '1')
+
+  const clamp = (x: number, y: number) => {
+    const r = wrapRef.current?.getBoundingClientRect()
+    const w = r?.width ?? 300
+    const h = r?.height ?? 120
+    return { x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - w - 8)), y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - h - 8)) }
+  }
+  useEffect(() => {
+    if (!float) return
+    const onResize = () => setPos((p) => (p ? clamp(p.x, p.y) : p))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [float])
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (!float || (e.target as HTMLElement).closest('button')) return
+    const r = wrapRef.current!.getBoundingClientRect()
+    const dx = e.clientX - r.left
+    const dy = e.clientY - r.top
+    const move = (ev: PointerEvent) => setPos(clamp(ev.clientX - dx, ev.clientY - dy))
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const final = clamp(ev.clientX - dx, ev.clientY - dy)
+      setPos(final)
+      try { localStorage.setItem(POS_KEY, JSON.stringify(final)) } catch { /* sem storage */ }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const toggleMin = () => setMinimized((m) => {
+    try { localStorage.setItem(MIN_KEY, m ? '0' : '1') } catch { /* sem storage */ }
+    return !m
+  })
+  const toggleMute = () => {
+    if (volume > 0) {
+      try { localStorage.setItem(PREV_VOL_KEY, String(volume)) } catch { /* sem storage */ }
+      update({ musicVolume: 0 })
+    } else {
+      update({ musicVolume: Number(localStorage.getItem(PREV_VOL_KEY)) || 60 })
+    }
+  }
+  const [pinned, setPinned] = useState(false)
+  const togglePin = async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window')
+      await getCurrentWindow().setAlwaysOnTop(!pinned)
+      setPinned(!pinned)
+    } catch {
+      toast.error('Não foi possível fixar a janela por cima.')
+    }
+  }
+  const hasDocPip = typeof window !== 'undefined' && 'documentPictureInPicture' in window
+  const showMini = float && minimized
+  const style = float ? (pos ? { left: pos.x, top: pos.y } : { right: 12, bottom: 12 }) : undefined
+
   return (
-    <div className="w-[300px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border bg-[var(--bg-elevated)] shadow-[var(--shadow)]" role="region" aria-label="Vibe Beats — player de música">
-      <div className="relative bg-black" style={{ width: '100%', height: 200 }}>
+    <div
+      ref={wrapRef}
+      className={`${float ? 'fixed z-[45] w-[300px] max-w-[calc(100vw-1.5rem)]' : 'w-full'} overflow-hidden rounded-lg border border-border bg-[var(--bg-elevated)] text-fg shadow-[var(--shadow)]`}
+      style={style}
+      role="region"
+      aria-label="Vibe Beats — player de música"
+    >
+      <div className={`flex items-center gap-1.5 px-2 py-1 ${float ? 'cursor-grab active:cursor-grabbing' : ''}`} onPointerDown={startDrag}>
+        {float && <GripHorizontal size={14} className="shrink-0 text-fg-muted" aria-hidden />}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-bold tracking-wide text-fg-muted uppercase">
+          Vibe Beats <span className="rounded bg-[var(--accent)] px-1 text-[10px] text-[var(--accent-contrast)]">APP</span>
+        </span>
+        {float && hasDocPip && onPip && <button className="icon-btn h-7 w-7" aria-label="Abrir em janela flutuante" data-tip="Janela flutuante (fica visível ao trocar de app)" onClick={onPip}><PictureInPicture2 size={14} /></button>}
+        {float && !hasDocPip && isTauri && <button className={`icon-btn h-7 w-7 ${pinned ? 'active' : ''}`} aria-pressed={pinned} aria-label="Manter o app por cima de outras janelas" data-tip={pinned ? 'Desafixar o app' : 'Manter o app por cima das outras janelas'} onClick={() => void togglePin()}><Pin size={14} /></button>}
+        {float && <button className="icon-btn h-7 w-7" aria-label={minimized ? 'Expandir player' : 'Minimizar player'} data-tip={minimized ? 'Expandir' : 'Minimizar'} onClick={toggleMin}>{minimized ? <Plus size={14} /> : <Minus size={14} />}</button>}
+        {!float && onPipClose && <button className="icon-btn h-7 w-7" aria-label="Voltar para a janela do app" data-tip="Voltar para o app" onClick={onPipClose}><X size={14} /></button>}
+      </div>
+      {/* o player continua montado (e tocando) mesmo minimizado */}
+      <div className="relative bg-black" style={{ width: '100%', height: showMini ? 0 : float ? 170 : 190, overflow: 'hidden' }}>
         <div ref={hostRef} className="h-full w-full" />
         {needsClick && playing && (
           <button className="absolute inset-0 grid place-items-center border-0 bg-black/70 font-semibold text-white" onClick={() => { playerRef.current?.playVideo(); setNeedsClick(false) }}>
@@ -169,24 +259,23 @@ function PlayerCard({ channelId, session }: { channelId: string; session: MusicS
           </button>
         )}
       </div>
-      <div className="p-3">
-        <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-fg-muted uppercase">
-          Vibe Beats <span className="rounded bg-[var(--accent)] px-1 text-[10px] text-[var(--accent-contrast)]">APP</span>
-        </div>
-        <div className="truncate font-semibold" title={session.title ?? ''}>{session.title}</div>
+      <div className="px-3 pt-2 pb-3">
+        <div className="truncate text-sm font-semibold" title={session.title ?? ''}>{session.title}</div>
         <div className="mt-1 flex items-center gap-1">
-          <button className={btn} aria-label="Voltar" data-tip="Voltar" onClick={() => void controlMusic(channelId, 'back')}><SkipBack size={16} /></button>
+          {!showMini && <button className={btn} aria-label="Voltar" data-tip="Voltar" onClick={() => void controlMusic(channelId, 'back')}><SkipBack size={16} /></button>}
           <button className={btn} aria-label={playing ? 'Pausar' : 'Continuar'} data-tip={playing ? 'Pausar' : 'Continuar'} onClick={() => void controlMusic(channelId, playing ? 'pause' : 'resume')}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
           <button className={btn} aria-label="Pular" data-tip="Pular" onClick={() => void controlMusic(channelId, 'skip')}><SkipForward size={16} /></button>
-          <button className={btn} aria-label="Parar e limpar a fila" data-tip="Parar" onClick={() => void controlMusic(channelId, 'stop')}><Square size={14} /></button>
-          <Volume2 size={15} className="ml-1 shrink-0 text-fg-muted" aria-hidden />
-          <input type="range" min={0} max={100} value={volume} aria-label="Volume da música (só para você)" className="min-w-0 flex-1" onChange={(e) => update({ musicVolume: Number(e.target.value) })} />
+          {!showMini && <button className={btn} aria-label="Parar e limpar a fila" data-tip="Parar" onClick={() => void controlMusic(channelId, 'stop')}><Square size={14} /></button>}
+          <button className="icon-btn ml-1 h-8 w-8 shrink-0" aria-label={volume === 0 ? 'Ativar o som da música' : 'Silenciar a música (só para você)'} data-tip={volume === 0 ? 'Ativar som' : 'Silenciar'} aria-pressed={volume === 0} onClick={toggleMute}>{volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
+          {!showMini && <input type="range" min={0} max={100} value={volume} aria-label="Volume da música (só para você)" className="min-w-0 flex-1" onChange={(e) => update({ musicVolume: Number(e.target.value) })} />}
         </div>
-        <a className="mt-1 inline-flex items-center gap-1 text-xs" href={watchUrl(session.video_id ?? '')} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Abrir no YouTube</a>
+        {!showMini && <a className="mt-1 inline-flex items-center gap-1 text-xs" href={watchUrl(session.video_id ?? '')} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Abrir no YouTube</a>}
       </div>
     </div>
   )
 }
+
+type DocPip = { requestWindow: (o?: { width?: number; height?: number }) => Promise<Window> }
 
 /** Cartão flutuante do player: só existe enquanto você está numa chamada com música tocando. */
 export function MusicHost() {
@@ -195,12 +284,50 @@ export function MusicHost() {
   const status = useVoice((s) => s.status)
   const { data } = useMusic(channelId)
   const { data: members } = useMembers(serverId)
+  const [pip, setPip] = useState<Window | null>(null)
   const session = data?.session
   const botOn = !!members?.some((m) => m.profile?.is_bot)
-  if (!channelId || !serverId || !session || session.status === 'idle' || !session.video_id || !botOn || status === 'idle') return null
-  return (
-    <div className="fixed right-3 bottom-3 z-40 max-md:left-3 max-md:right-3 max-md:flex max-md:justify-center" style={{ zIndex: 45 }}>
-      <PlayerCard key={channelId} channelId={channelId} session={session} />
-    </div>
-  )
+  const active = !!channelId && !!serverId && !!session && session.status !== 'idle' && !!session.video_id && botOn && status !== 'idle'
+
+  // fecha a janela flutuante quando a música/chamada acaba
+  useEffect(() => {
+    if (!active && pip) {
+      pip.close()
+      setPip(null)
+    }
+  }, [active, pip])
+
+  const openPip = async () => {
+    const api = (window as unknown as { documentPictureInPicture?: DocPip }).documentPictureInPicture
+    if (!api) return
+    try {
+      const w = await api.requestWindow({ width: 340, height: 380 })
+      // copia estilos e atributos do tema para a nova janela
+      for (const ss of Array.from(document.styleSheets)) {
+        try {
+          const st = w.document.createElement('style')
+          st.textContent = Array.from(ss.cssRules).map((r) => r.cssText).join('\n')
+          w.document.head.appendChild(st)
+        } catch {
+          if (ss.href) {
+            const l = w.document.createElement('link')
+            l.rel = 'stylesheet'
+            l.href = ss.href
+            w.document.head.appendChild(l)
+          }
+        }
+      }
+      for (const a of document.documentElement.getAttributeNames()) w.document.documentElement.setAttribute(a, document.documentElement.getAttribute(a) ?? '')
+      w.document.body.style.margin = '0'
+      w.document.body.style.background = 'var(--bg-primary)'
+      w.addEventListener('pagehide', () => setPip(null))
+      setPip(w)
+    } catch {
+      toast.error('Não foi possível abrir a janela flutuante.')
+    }
+  }
+
+  if (!active) return null
+  if (pip) return createPortal(<PlayerCard key={`pip-${channelId}`} channelId={channelId} session={session} mode="pip" onPipClose={() => { pip.close(); setPip(null) }} />, pip.document.body)
+  return <PlayerCard key={channelId} channelId={channelId} session={session} mode="float" onPip={() => void openPip()} />
 }
