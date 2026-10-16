@@ -185,7 +185,7 @@ function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId
   // mantém o player sempre dentro da tela (posição salva de outra janela, expandir/minimizar, redimensionar)
   useLayoutEffect(() => {
     if (float && pos) setPos((p) => (p ? clamp(p.x, p.y) : p))
-  }, [minimized, float])
+  }, [minimized, float]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!float) return
