@@ -67,8 +67,10 @@ interface VoiceState {
   serverMuted: boolean
   serverDeafened: boolean
   setServerFlags: (muted: boolean, deafened: boolean) => void
-  join: (t: VoiceTarget, watch?: string) => Promise<void>
-  joinInner: (t: VoiceTarget, watch?: string) => Promise<void>
+  join: (t: VoiceTarget, watch?: string, opts?: { muted?: boolean }) => Promise<void>
+  joinInner: (t: VoiceTarget, watch?: string, opts?: { muted?: boolean }) => Promise<void>
+  /** Canal de ausentes do servidor atual (sempre mudo), preenchido pelo observador de ausência. */
+  afkChannelId: string | null
   /** Quem você está assistindo (transmissão de tela); só essa é baixada. */
   /** O navegador bloqueou o áudio da chamada até um clique (Safari/iOS). */
   audioBlocked: boolean
@@ -220,10 +222,11 @@ export const useVoice = create<VoiceState>((set, get) => {
 
   /** Decide se o microfone transmite agora (mute, ensurdecido, push-to-talk). */
   const applyMic = async () => {
-    const { room, micMuted, deafened, pttActive, serverMuted } = get()
+    const { room, micMuted, deafened, pttActive, serverMuted, target, afkChannelId } = get()
     if (!room || room.state !== ConnectionState.Connected) return
+    const inAfk = !!afkChannelId && target?.id === afkChannelId
     const ptt = useSettings.getState().settings.voice.pttEnabled
-    const want = !micMuted && !deafened && !serverMuted && (!ptt || pttActive)
+    const want = !micMuted && !deafened && !serverMuted && !inAfk && (!ptt || pttActive)
     const lp = room.localParticipant
     const pub = lp.getTrackPublication(Track.Source.Microphone)
     try {
@@ -486,6 +489,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     micChain: null,
     watching: null,
     audioBlocked: false,
+    afkChannelId: null,
     enableAudio: async () => {
       try {
         await get().room?.startAudio()
@@ -516,23 +520,23 @@ export const useVoice = create<VoiceState>((set, get) => {
       sync()
     },
 
-    join: async (target, watch) => {
+    join: async (target, watch, opts) => {
       if (get().channelId === target.id && get().status !== 'failed') return
       if (joiningId === target.id) return // já conectando a esta sala (duplo clique, remontagem de efeito): UMA instância de Room
       joiningId = target.id
       try {
-        await get().joinInner(target, watch)
+        await get().joinInner(target, watch, opts)
       } finally {
         joiningId = null
       }
     },
 
-    joinInner: async (target, watch) => {
+    joinInner: async (target, watch, opts) => {
       if (get().room) await get().leave()
       userLeft = false
       retries = 0
       const s = useSettings.getState().settings.voice
-      set({ status: 'connecting', error: null, target, channelId: target.id, micMuted: s.joinMuted || s.pttEnabled, deafened: false, focus: null, watching: watch ?? null })
+      set({ status: 'connecting', error: null, target, channelId: target.id, micMuted: s.joinMuted || s.pttEnabled || !!opts?.muted, deafened: false, focus: null, watching: watch ?? null })
       try {
         vozLog('entrando', target.name)
         const room = await connectRoom(target)
@@ -606,6 +610,7 @@ export const useVoice = create<VoiceState>((set, get) => {
 
     toggleMic: async () => {
       if (get().serverMuted) return void toast.error('Você foi silenciado por um moderador e não pode ativar o microfone agora.')
+      if (get().afkChannelId && get().target?.id === get().afkChannelId) return void toast.info('O canal de ausentes é mudo: ninguém fala nele.')
       const { micMuted, deafened } = get()
       if (deafened) {
         // sair do modo ensurdecido ao ativar o microfone (comportamento esperado)
@@ -637,6 +642,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       const room = get().room
       if (!room) return
       if (get().serverMuted && !room.localParticipant.isCameraEnabled) return void toast.error('Você foi silenciado por um moderador e não pode ligar a câmera agora.')
+      if (get().afkChannelId && get().target?.id === get().afkChannelId) return void toast.info('O canal de ausentes é mudo: sem câmera nem tela.')
       const s = useSettings.getState().settings.voice
       try {
         await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, {
@@ -659,6 +665,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       const lp = room.localParticipant
       const s = useSettings.getState().settings.voice
       if (get().serverMuted && !lp.isScreenShareEnabled) return void toast.error('Você foi silenciado por um moderador e não pode compartilhar a tela agora.')
+      if (get().afkChannelId && get().target?.id === get().afkChannelId) return void toast.info('O canal de ausentes é mudo: sem câmera nem tela.')
       if (lp.isScreenShareEnabled) {
         // encerra de verdade a captura (o aviso "compartilhando" do navegador some)
         for (const src of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) lp.getTrackPublication(src)?.track?.mediaStreamTrack.stop()

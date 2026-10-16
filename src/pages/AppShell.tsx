@@ -6,6 +6,7 @@ import { Bell, Hash, MessageSquare, Volume2, WifiOff, X } from 'lucide-react'
 import { useRealtimeSync } from '@/data/realtime'
 import { usePresenceManager } from '@/data/presence'
 import { useVoiceModeration } from '@/data/voiceModeration'
+import { useAfkWatcher } from '@/data/afk'
 import { MusicHost } from '@/components/music/MusicHost'
 import { qk, useDMs, useFriends, useServers, useUnread } from '@/data/queries'
 import { useSession } from '@/store/session'
@@ -193,6 +194,7 @@ function Banners() {
 export function AppShell() {
   useRealtimeSync()
   useVoiceModeration()
+  useAfkWatcher()
   usePresenceManager()
   useGlobalKeybinds()
   const { serverId } = useParams()

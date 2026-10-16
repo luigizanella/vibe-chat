@@ -5,11 +5,11 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
-import { HeadphoneOff, Music, BellOff, Check, X, ChevronDown, ChevronRight, Hash, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus, Video } from 'lucide-react'
+import { HeadphoneOff, Music, BellOff, Check, X, ChevronDown, ChevronRight, Hash, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus, Moon, Video } from 'lucide-react'
 import { rpc } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { hasPerm } from '@/lib/perms'
-import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useUnread } from '@/data/queries'
+import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useServers, useUnread } from '@/data/queries'
 import { findPref, markChannelsRead, setNotifPref } from '@/data/actions'
 import { useCamUsers, useLiveUsers, useVoiceOccupants } from '@/data/presence'
 import { MUSIC_BOT_ID, useServerMusic } from '@/data/music'
@@ -57,7 +57,9 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const nav = useNavigate()
   const { data: sessions } = useServerMusic(ch.kind === 'voice' ? serverId : undefined)
   const playing = sessions?.find((x) => x.channel_id === ch.id && x.status !== 'idle')
-  const Icon = ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
+  const { data: srvs } = useServers()
+  const isAfk = ch.kind === 'voice' && srvs?.find((s) => s.id === serverId)?.afk_channel_id === ch.id
+  const Icon = isAfk ? Moon : ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={clsx(mv.overId === ch.id && 'rounded-md bg-[var(--bg-selected)] ring-2 ring-[var(--accent)]')} {...mv.dropProps(ch)}>
       <div className="group relative mb-0.5" onContextMenu={onContext}>
@@ -70,6 +72,7 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
         >
           <Icon size={18} className="shrink-0 opacity-70" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{ch.name}</span>
+          {isAfk && <span className="shrink-0 rounded bg-[var(--bg-tertiary)] px-1 text-[10px] leading-4 font-semibold text-fg-muted" title="Canal de ausentes: sempre mudo">AFK</span>}
           {mentions > 0 && !muted && <span className="badge">{mentions}</span>}
           {muted && <BellOff size={12} aria-label="Silenciado" />}
         </button>

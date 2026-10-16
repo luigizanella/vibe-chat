@@ -37,6 +37,8 @@ export interface Settings {
   nicknames: Record<string, string>
   /** Volume do bot de música (0–100), só para você. */
   musicVolume: number
+  /** Ausência automática: considerar a minha voz como atividade. */
+  afk: { voiceCounts: boolean }
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   desktop: { autostart: false, closeToTray: true },
   nicknames: {},
   musicVolume: 60,
+  afk: { voiceCounts: true },
 }
 
 const LS_KEY = 'vibe.settings.v1'

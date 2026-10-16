@@ -29,6 +29,9 @@ export interface Server {
   icon_path: string | null
   owner_id: string
   music_channel_id: string | null
+  /** Canal de voz de ausentes (sempre mudo) e tempo de inatividade, em minutos. */
+  afk_channel_id: string | null
+  afk_timeout_minutes: number
   created_at: string
 }
 export interface MusicSession {

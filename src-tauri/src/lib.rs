@@ -10,6 +10,21 @@ use tauri_plugin_autostart::MacosLauncher;
 /// Se verdadeiro, fechar a janela apenas a esconde na bandeja (configurável no app).
 struct CloseToTray(AtomicBool);
 
+/// Segundos desde a última entrada do usuário (mouse/teclado) em QUALQUER programa.
+#[tauri::command]
+fn idle_seconds() -> Result<u64, String> {
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        user_idle::UserIdle::get_time()
+            .map(|t| t.as_seconds())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Err("sem suporte neste sistema".into())
+    }
+}
+
 #[tauri::command]
 fn set_close_to_tray(state: tauri::State<CloseToTray>, enabled: bool) {
     state.0.store(enabled, Ordering::Relaxed);
@@ -37,7 +52,7 @@ pub fn run() {
             Some(vec!["--minimized"]),
         ))
         .manage(CloseToTray(AtomicBool::new(true)))
-        .invoke_handler(tauri::generate_handler![set_close_to_tray])
+        .invoke_handler(tauri::generate_handler![set_close_to_tray, idle_seconds])
         .setup(|app| {
             // A janela é criada aqui (e não pelo tauri.conf.json) para registrar o tratador de permissões
             // do WebView2. Sem ele, o Windows/WebView2 pode negar câmera/microfone/tela sem mostrar

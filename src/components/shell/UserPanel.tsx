@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Circle, Headphones, HeadphoneOff, Mic, MicOff, Moon, MinusCircle, EyeOff, PhoneOff, Settings, SmilePlus, Signal, Monitor, Video } from 'lucide-react'
 import { useSession } from '@/store/session'
 import { useUI } from '@/store/ui'
+import { useAfk } from '@/lib/idle'
 import { useVoice } from '@/store/voice'
 import { setCustomStatus, setStatus } from '@/data/actions'
 import { Avatar, Modal, PRESENCE_LABEL, Spinner, useCloseModal } from '@/components/ui'
@@ -94,9 +95,10 @@ export function UserPanel() {
   const openMenu = useUI((s) => s.openMenu)
   const openModal = useUI((s) => s.openModal)
   const { room, micMuted, deafened, toggleMic, toggleDeafen } = useVoice()
+  const afk = useAfk((s) => s.active)
   if (!profile) return null
   // meu status vem do perfil (fonte da verdade), não da ida e volta da presença
-  const shown: Presence = profile.status_pref === 'invisible' ? 'offline' : (profile.status_pref as Presence)
+  const shown: Presence = profile.status_pref === 'invisible' ? 'offline' : profile.status_pref === 'online' && afk ? 'idle' : (profile.status_pref as Presence)
   const inCall = !!room
 
   const statusMenu = (e: React.MouseEvent) => {

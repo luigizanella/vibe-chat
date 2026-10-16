@@ -61,7 +61,7 @@ const PERM_LABEL: Record<string, { text: string; cls: string }> = {
 }
 
 export function VoiceTab() {
-  const { settings, updateVoice } = useSettings()
+  const { settings, updateVoice, update } = useSettings()
   const v = settings.voice
   const { devices, labelsHidden, requestAccess } = useDevices()
   const switchDevice = useVoice((s) => s.switchDevice)
@@ -267,6 +267,7 @@ export function VoiceTab() {
           <span className="hint">Clique em “Testar microfone” e ajuste: o ruído deve ficar abaixo do traço e a sua voz acima. Mais para a direita filtra mais; no máximo quase nada passa.</span></div>
       )}      <SettingRow title="Cancelamento de eco"><Toggle checked={v.echoCancellation} onChange={(a) => updateVoice({ echoCancellation: a })} label="Cancelamento de eco" /></SettingRow>
       <SettingRow title="Controle automático de ganho"><Toggle checked={v.autoGainControl} onChange={(a) => updateVoice({ autoGainControl: a })} label="Controle automático de ganho" /></SettingRow>
+      <SettingRow title="Considerar a minha voz como atividade" description="Enquanto você fala (ou transmite), o canal de ausentes não te move por inatividade."><Toggle checked={settings.afk.voiceCounts} onChange={(a) => update({ afk: { voiceCounts: a } })} label="Voz conta como atividade" /></SettingRow>
       <SettingRow title="Entrar em chamadas com o microfone silenciado"><Toggle checked={v.joinMuted} onChange={(a) => updateVoice({ joinMuted: a })} label="Entrar silenciado" /></SettingRow>
 
       <div className="divider" />

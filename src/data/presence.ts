@@ -4,6 +4,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useSession } from '@/store/session'
 import { useVoice } from '@/store/voice'
+import { useAfk } from '@/lib/idle'
 import { useServers, useFriends, useDMs } from './queries'
 import type { Presence } from '@/lib/types'
 import type { Scope } from './messages'
@@ -152,6 +153,7 @@ export function usePresenceManager() {
   const voiceChannel = useVoice((s) => s.channelId)
   const live = useVoice((s) => s.screenOn)
   const cam = useVoice((s) => s.camOn)
+  const afk = useAfk((s) => s.active)
   const { data: servers } = useServers()
   const { data: friends } = useFriends()
   const { data: dms } = useDMs()
@@ -159,7 +161,7 @@ export function usePresenceManager() {
   const [idle, setIdle] = useState(false)
 
   const pref = profile?.status_pref ?? 'online'
-  const myStatus: Presence | null = pref === 'invisible' ? null : pref === 'online' && idle ? 'idle' : pref
+  const myStatus: Presence | null = pref === 'invisible' ? null : pref === 'online' && (idle || afk) ? 'idle' : pref
   const meta = useRef<Meta | null>(null)
   meta.current = myStatus ? { status: myStatus, voice: voiceChannel, live: !!voiceChannel && live, cam: !!voiceChannel && cam, ts: Date.now() } : null
 

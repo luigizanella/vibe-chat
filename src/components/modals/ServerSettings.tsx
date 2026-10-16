@@ -154,10 +154,47 @@ function Overview({ ctx }: { ctx: PermContext }) {
       <div className="field mt-5"><label htmlFor="s-name">Nome do servidor</label><input id="s-name" className="input" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /></div>
       <button className="btn btn-primary mt-4" disabled={busy || !dirty || !name.trim()} onClick={() => void save()}>{busy && <Spinner size={14} />} Salvar alterações</button>
 
+      <AfkSection serverId={server.id} afkChannel={server.afk_channel_id} minutes={server.afk_timeout_minutes} />
+
     </div>
   )
 }
 
+/* ------------------------------------------------------------- ausência (AFK) */
+const AFK_MINUTES = [1, 5, 10, 15, 30, 60]
+
+function AfkSection({ serverId, afkChannel, minutes }: { serverId: string; afkChannel: string | null; minutes: number }) {
+  const qc = useQueryClient()
+  const { data: channels } = useChannels(serverId)
+  const [channel, setChannel] = useState(afkChannel ?? '')
+  const [mins, setMins] = useState(minutes)
+  const { busy, run } = useAction()
+  const dirty = channel !== (afkChannel ?? '') || mins !== minutes
+  const save = () =>
+    run(async () => {
+      await rpc('set_afk', { p_server: serverId, p_channel: channel || null, p_minutes: mins })
+      await qc.invalidateQueries({ queryKey: qk.servers })
+      toast.success('Ausência atualizada.')
+    })
+  return (
+    <section className="mt-8 rounded-xl border border-border bg-secondary p-4" aria-label="Ausência">
+      <h3 className="mt-0 mb-1 text-base">Ausência</h3>
+      <p className="mt-0 mb-3 text-sm text-fg-2">Quem ficar sem usar o computador por um tempo é movido (mudo) para o canal de ausentes e volta sozinho quando você retornar.</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="field"><label htmlFor="afk-ch">Canal de ausentes</label>
+          <select id="afk-ch" className="select" value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <option value="">Nenhum (só muda o status para Ausente)</option>
+            {(channels ?? []).filter((c) => c.kind === 'voice').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select></div>
+        <div className="field"><label htmlFor="afk-min">Tempo de inatividade</label>
+          <select id="afk-min" className="select" value={mins} onChange={(e) => setMins(Number(e.target.value))}>
+            {AFK_MINUTES.map((m) => <option key={m} value={m}>{m === 60 ? '1 hora' : `${m} ${m === 1 ? 'minuto' : 'minutos'}`}</option>)}
+          </select></div>
+      </div>
+      <button className="btn btn-primary mt-3" disabled={busy || !dirty} onClick={() => void save()}>{busy && <Spinner size={14} />} Salvar ausência</button>
+    </section>
+  )
+}
 /* ----------------------------------------------------------------- canais */
 function ChannelsTab({ ctx }: { ctx: PermContext }) {
   const sid = ctx.server.id
