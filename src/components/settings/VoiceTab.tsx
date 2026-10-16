@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Play, Video, VideoOff } from 'lucide-react'
 import { useSettings } from '@/store/settings'
-import { useVoice } from '@/store/voice'
+import { diagnoseMic, useVoice } from '@/store/voice'
 import { isTauri } from '@/lib/env'
-import { GateCore, levelFromDb } from '@/lib/gate'
+import { MicChain, captureConstraints, type NoiseMode } from '@/lib/micProcessor'
 import { queryMediaPermissions, reportMediaError, permissionSteps } from '@/lib/mediaErrors'
 import { codeLabel } from '@/lib/keys'
 import { SettingRow, Toggle } from '@/components/ui'
@@ -80,66 +80,69 @@ export function VoiceTab() {
   const stop = useRef<(() => void) | null>(null)
   const loopRef = useRef(loopback)
   loopRef.current = loopback
+  const muteEl = useRef<HTMLAudioElement | null>(null)
+  useEffect(() => { if (muteEl.current) muteEl.current.muted = !loopback }, [loopback])
+  const [chainStatus, setChainStatus] = useState<string | null>(null)
+  const inCall = useVoice((s) => !!s.room)
+  const liveChain = useVoice((s) => s.micChain)
+  const [diag, setDiag] = useState<ReturnType<typeof diagnoseMic>>(null)
+  useEffect(() => {
+    if (!inCall) return setDiag(null)
+    const tick = () => setDiag(diagnoseMic())
+    tick()
+    const iv = setInterval(tick, 1000)
+    return () => clearInterval(iv)
+  }, [inCall, liveChain])
 
   useEffect(() => () => stop.current?.(), [])
 
   const startTest = async () => {
     try {
+      const cur0 = useSettings.getState().settings.voice
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: v.inputId && v.inputId !== 'default' ? { exact: v.inputId } : undefined, echoCancellation: v.echoCancellation, noiseSuppression: v.noiseSuppression, autoGainControl: v.autoGainControl },
+        audio: { deviceId: cur0.inputId && cur0.inputId !== 'default' ? { exact: cur0.inputId } : undefined, ...captureConstraints(cur0.noiseMode, cur0.echoCancellation, cur0.autoGainControl) },
       })
-      const ctx = new AudioContext()
-      const src = ctx.createMediaStreamSource(stream)
-      const hp = ctx.createBiquadFilter()
-      hp.type = 'highpass'
-      hp.frequency.value = 90
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 1024
-      src.connect(hp)
-      hp.connect(analyser)
-      const dest = ctx.createMediaStreamDestination()
-      const gain = ctx.createGain()
-      gain.gain.value = 0
-      hp.connect(gain).connect(dest)
-      const el = new Audio()
-      el.srcObject = dest.stream
-      const sink = el as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
-      if (v.outputId && sink.setSinkId) await sink.setSinkId(v.outputId).catch(() => undefined)
-      void el.play().catch(() => undefined)
-      // mesmo gate usado na chamada: o que passa aqui é o que seria enviado
-      const gate = new GateCore({ auto: true, sensitivity: 35 })
-      const buf = new Float32Array(analyser.fftSize)
-      let raf = 0
-      const tick = () => {
+      // a MESMA cadeia usada na chamada: o que passa aqui é exatamente o que seria enviado
+      const chain = new MicChain()
+      chain.configure({ mode: cur0.noiseMode, auto: cur0.autoSensitivity, sensitivity: cur0.sensitivity })
+      chain.onMeter = (lvl, open, thr) => {
         const cur = useSettings.getState().settings.voice
-        gate.opts = { auto: cur.autoSensitivity, sensitivity: cur.sensitivity }
-        analyser.getFloatTimeDomainData(buf)
-        let sum = 0
-        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
-        const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-9)
-        const open = gate.update(db, performance.now())
-        setLevel(levelFromDb(db))
+        chain.core.opts = { auto: cur.autoSensitivity, sensitivity: cur.sensitivity }
+        setLevel(lvl)
         setSending(open)
-        setAutoThr(levelFromDb(gate.thresholdDb))
-        gain.gain.value = loopRef.current && open ? 1 : 0
-        raf = requestAnimationFrame(tick)
+        setAutoThr(thr)
       }
-      tick()
+      chain.onStatus = setChainStatus
+      await chain.init({ track: stream.getAudioTracks()[0], kind: 'audio' } as never)
+      const el = new Audio()
+      el.srcObject = new MediaStream([chain.processedTrack!])
+      el.muted = !loopRef.current
+      muteEl.current = el
+      const sink = el as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
+      if (cur0.outputId && sink.setSinkId) await sink.setSinkId(cur0.outputId).catch(() => undefined)
+      void el.play().catch(() => undefined)
       setTesting(true)
       stop.current = () => {
-        cancelAnimationFrame(raf)
+        void chain.destroy()
         stream.getTracks().forEach((t) => t.stop())
-        void ctx.close()
         el.pause()
+        muteEl.current = null
         setTesting(false)
         setLevel(0)
         setSending(false)
+        setChainStatus(null)
         stop.current = null
       }
     } catch (e) {
       reportMediaError(e, 'microphone')
     }
   }
+  // trocar o modo de supressão durante o teste reinicia a cadeia com o novo modo
+  useEffect(() => {
+    if (!stop.current) return
+    stop.current()
+    void startTest()
+  }, [v.noiseMode, v.echoCancellation, v.autoGainControl])
   /* -------- teste de saída -------- */
   const testOutput = async () => {
     try {
@@ -207,7 +210,8 @@ export function VoiceTab() {
           </details>
         )}
         <div className="hint mt-2">O navegador/Windows pergunta na primeira vez que você usa. Nada é capturado sem a sua ação.</div>
-      </div>      {labelsHidden && (
+      </div>
+      {labelsHidden && (
         <div className="card mb-5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-fg-2">Para listar os nomes dos dispositivos, o navegador precisa de permissão.</span>
           <button className="btn btn-primary btn-sm" onClick={() => void requestAccess(false)}><Mic size={14} /> Permitir acesso</button>
@@ -240,15 +244,28 @@ export function VoiceTab() {
         {testing && <label className="mt-2 flex items-center gap-2 text-fg-2"><input type="checkbox" checked={loopback} onChange={(e) => setLoopback(e.target.checked)} /> Ouvir o que está sendo enviado (use fones)</label>}
       </div>
 
-      <SettingRow title="Sensibilidade automática" description="Aprende o ruído do ambiente (ventilador, teclado) e só transmite quando você fala acima dele. Recomendado.">
+      <div className="field mt-5"><label htmlFor="noise">Supressão de ruído</label>
+        <select id="noise" className="select" value={v.noiseMode} onChange={(e) => { updateVoice({ noiseMode: e.target.value as NoiseMode }); refreshProcessor() }}>
+          <option value="off">Nenhuma</option>
+          <option value="browser">Padrão do navegador</option>
+          <option value="high">Alta (recomendado)</option>
+        </select>
+        <span className="hint">“Alta” usa uma rede neural (RNNoise) que roda no seu computador e remove teclado, ventilador e ruído de fundo antes de enviar. Nada sai do seu aparelho além da sua voz.</span>
+        {(chainStatus ?? diag?.chain) === 'rnnoise-failed' && <span className="hint text-[var(--danger-text)]">Não foi possível carregar o filtro de Alta qualidade neste ambiente; usando apenas a porta de ruído.</span>}
+      </div>
+      {inCall && (
+        <p className="hint mt-1">
+          Diagnóstico da chamada: {diag === null ? 'microfone ainda não está publicado (ligue o microfone na chamada).' : `${diag.published ? 'a faixa enviada passa pelo filtro' : 'a faixa enviada NÃO passa pelo filtro'} · cadeia: ${diag.chain === 'rnnoise' ? 'RNNoise + porta de ruído' : diag.chain === 'gate-only' ? 'só porta de ruído' : diag.chain ?? 'inativa'}${diag.muted ? ' · microfone mudo' : ''}`}
+        </p>
+      )}
+      <SettingRow title="Sensibilidade de entrada automática" description="Aprende o ruído do ambiente e só transmite quando você fala acima dele. Desligue para ajustar à mão.">
         <Toggle checked={v.autoSensitivity} onChange={(a) => { updateVoice({ autoSensitivity: a }); refreshProcessor() }} label="Sensibilidade automática" />
       </SettingRow>
       {!v.autoSensitivity && (
         <div className="field mb-2"><label htmlFor="sens">Limite do filtro: {v.sensitivity === 0 ? 'desligado (envia tudo)' : v.sensitivity}</label>
           <input id="sens" type="range" min={0} max={100} step={1} value={v.sensitivity} onChange={(e) => { updateVoice({ sensitivity: Number(e.target.value) }); refreshProcessor() }} aria-valuetext={`${v.sensitivity} de 100`} />
-          <span className="hint">Teste o microfone e ajuste até o ruído de fundo ficar abaixo do traço e a sua voz acima. Mais para a direita = filtra mais.</span></div>
-      )}      <SettingRow title="Supressão de ruído" description="Filtro do navegador. Aplica-se ao entrar na próxima chamada."><Toggle checked={v.noiseSuppression} onChange={(a) => updateVoice({ noiseSuppression: a })} label="Supressão de ruído" /></SettingRow>
-      <SettingRow title="Cancelamento de eco"><Toggle checked={v.echoCancellation} onChange={(a) => updateVoice({ echoCancellation: a })} label="Cancelamento de eco" /></SettingRow>
+          <span className="hint">Clique em “Testar microfone” e ajuste: o ruído deve ficar abaixo do traço e a sua voz acima. Mais para a direita filtra mais; no máximo quase nada passa.</span></div>
+      )}      <SettingRow title="Cancelamento de eco"><Toggle checked={v.echoCancellation} onChange={(a) => updateVoice({ echoCancellation: a })} label="Cancelamento de eco" /></SettingRow>
       <SettingRow title="Controle automático de ganho"><Toggle checked={v.autoGainControl} onChange={(a) => updateVoice({ autoGainControl: a })} label="Controle automático de ganho" /></SettingRow>
       <SettingRow title="Entrar em chamadas com o microfone silenciado"><Toggle checked={v.joinMuted} onChange={(a) => updateVoice({ joinMuted: a })} label="Entrar silenciado" /></SettingRow>
 

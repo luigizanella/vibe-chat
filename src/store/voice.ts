@@ -9,14 +9,12 @@ import {
   RoomEvent,
   Track,
   VideoPresets,
-  type AudioProcessorOptions,
-  type TrackProcessor,
 } from 'livekit-client'
 import { supabase } from '@/lib/supabase'
 import { useSettings } from './settings'
 import { toast } from './ui'
 import { playSound } from '@/lib/sounds'
-import { GateCore, levelFromDb } from '@/lib/gate'
+import { MicChain, captureConstraints, type MicChainStatus } from '@/lib/micProcessor'
 import { screenPreset } from '@/lib/screen'
 import { reportMediaError, type MediaKind } from '@/lib/mediaErrors'
 
@@ -61,6 +59,8 @@ interface VoiceState {
   micLevel: number
   micOpen: boolean
   micThreshold: number
+  /** O que está rodando na cadeia de áudio do microfone (null = sem processador). */
+  micChain: MicChainStatus | null
   /** Silenciado/ensurdecido por um moderador do servidor (não dá para desfazer sozinho). */
   serverMuted: boolean
   serverDeafened: boolean
@@ -90,61 +90,6 @@ function loadVolumes(): Record<string, number> {
 
 export { levelFromDb } from '@/lib/gate'
 
-/**
- * Processador de áudio local: filtro passa-alta + porta de ruído (noise gate) via WebAudio.
- * Fica entre a captura e o envio; mute/PTT continuam sendo aplicados na própria track.
- * A decisão de abrir/fechar vem do GateCore (lógica pura e testada).
- */
-class MicGateProcessor implements TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
-  name = 'vibe-mic-gate'
-  processedTrack?: MediaStreamTrack
-  readonly core = new GateCore({ auto: true, sensitivity: 35 })
-  /** Recebe (nível 0–100, aberto, limite 0–100) ~10x por segundo. */
-  onMeter?: (level: number, open: boolean, threshold: number) => void
-  private nodes: AudioNode[] = []
-  private timer?: ReturnType<typeof setInterval>
-  private ticks = 0
-
-  async init(opts: AudioProcessorOptions) {
-    const ctx = opts.audioContext
-    const source = ctx.createMediaStreamSource(new MediaStream([opts.track]))
-    const highpass = ctx.createBiquadFilter() // remove zumbido/vibração abaixo de ~90 Hz
-    highpass.type = 'highpass'
-    highpass.frequency.value = 90
-    const analyser = ctx.createAnalyser()
-    analyser.fftSize = 1024
-    const gain = ctx.createGain()
-    const dest = ctx.createMediaStreamDestination()
-    source.connect(highpass)
-    highpass.connect(analyser)
-    highpass.connect(gain)
-    gain.connect(dest)
-    this.nodes = [source, highpass, analyser, gain]
-    this.processedTrack = dest.stream.getAudioTracks()[0]
-    this.core.reset()
-    const buf = new Float32Array(analyser.fftSize)
-    this.timer = setInterval(() => {
-      analyser.getFloatTimeDomainData(buf)
-      let sum = 0
-      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
-      const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-9)
-      const now = performance.now()
-      const open = this.core.update(db, now)
-      gain.gain.setTargetAtTime(open ? 1 : 0, ctx.currentTime, open ? 0.005 : 0.05)
-      if (++this.ticks % 5 === 0) this.onMeter?.(levelFromDb(db), open, levelFromDb(this.core.thresholdDb))
-    }, 20)
-  }
-  async restart(opts: AudioProcessorOptions) {
-    await this.destroy()
-    await this.init(opts)
-  }
-  async destroy() {
-    clearInterval(this.timer)
-    this.nodes.forEach((n) => n.disconnect())
-    this.nodes = []
-    this.processedTrack = undefined
-  }
-}
 /** Mede o RTT do par ICE ativo (WebRTC getStats). Retorna null se indisponível. */
 async function measureRtt(room: Room): Promise<number | null> {
   try {
@@ -166,7 +111,7 @@ async function measureRtt(room: Room): Promise<number | null> {
 
 let pingTimer: ReturnType<typeof setInterval> | undefined
 
-let gate: MicGateProcessor | null = null
+let gate: MicChain | null = null
 let audioContainer: HTMLDivElement | null = null
 let userLeft = false
 let retries = 0
@@ -288,18 +233,20 @@ export const useVoice = create<VoiceState>((set, get) => {
     const track = room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track
     if (!(track instanceof LocalAudioTrack)) return
     const v = useSettings.getState().settings.voice
-    gate ??= new MicGateProcessor()
-    gate.core.opts = { auto: v.autoSensitivity, sensitivity: v.sensitivity }
+    gate ??= new MicChain()
+    gate.configure({ mode: v.noiseMode, auto: v.autoSensitivity, sensitivity: v.sensitivity })
     gate.onMeter = (micLevel, micOpen, micThreshold) => set({ micLevel, micOpen, micThreshold })
+    gate.onStatus = (micChain) => set({ micChain })
     if (track.getProcessor?.() !== gate) {
       try {
         await track.setProcessor(gate)
-      } catch {
+      } catch (e) {
+        console.warn('processador de microfone indisponível', (e as Error).message)
         gate = null // navegador sem suporte: segue sem porta de ruído
+        set({ micChain: null })
       }
     }
   }
-
   const handleMediaError = (e: unknown, what: string) => {
     const kind: MediaKind = what === 'câmera' ? 'camera' : what === 'tela' ? 'screen' : what.startsWith('saída') ? 'speaker' : 'microphone'
     const problem = reportMediaError(e, kind)
@@ -438,9 +385,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       disconnectOnPageLeave: true,
       audioCaptureDefaults: {
         deviceId: s.inputId || undefined,
-        echoCancellation: s.echoCancellation,
-        noiseSuppression: s.noiseSuppression,
-        autoGainControl: s.autoGainControl,
+        ...captureConstraints(s.noiseMode, s.echoCancellation, s.autoGainControl),
         channelCount: 1,
       },
       audioOutput: { deviceId: s.outputId || undefined },
@@ -478,6 +423,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     micLevel: 0,
     micOpen: false,
     micThreshold: 0,
+    micChain: null,
     serverMuted: false,
     serverDeafened: false,
     setServerFlags: (serverMuted, serverDeafened) => {
@@ -685,9 +631,29 @@ export const useVoice = create<VoiceState>((set, get) => {
 
     refreshProcessor: () => {
       const v = useSettings.getState().settings.voice
-      if (gate) gate.core.opts = { auto: v.autoSensitivity, sensitivity: v.sensitivity }
-      else void installGate()
+      if (!gate) {
+        void installGate().then(() => applyMic())
+        return
+      }
+      const modeChanged = gate.mode !== v.noiseMode
+      gate.configure({ mode: v.noiseMode, auto: v.autoSensitivity, sensitivity: v.sensitivity })
+      if (modeChanged) {
+        // o modo muda a captura (supressão do navegador) e a cadeia: reabre a faixa com as novas opções
+        const track = get().room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track
+        if (track instanceof LocalAudioTrack) {
+          void track.restartTrack(captureConstraints(v.noiseMode, v.echoCancellation, v.autoGainControl)).catch((e) => handleMediaError(e, 'microfone'))
+        }
+      }
       void applyMic()
     },
   }
 })
+
+/** Diagnóstico: confirma que a faixa PUBLICADA na LiveKit é a que sai da cadeia de áudio local. */
+export function diagnoseMic(): { chain: MicChainStatus | null; published: boolean; muted: boolean } | null {
+  const room = useVoice.getState().room
+  const track = room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track
+  if (!(track instanceof LocalAudioTrack)) return null
+  const published = !!gate && track.getProcessor?.() === gate && !!gate.processedTrack && track.mediaStreamTrack === gate.processedTrack
+  return { chain: gate?.status ?? null, published, muted: track.isMuted }
+}

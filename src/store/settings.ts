@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 import { contrastColor } from '@/lib/color'
+import type { NoiseMode } from '@/lib/micProcessor'
 
 export interface VoiceSettings {
   inputId: string // dispositivos são locais da máquina: não sincronizam
@@ -9,7 +10,8 @@ export interface VoiceSettings {
   pttEnabled: boolean
   autoSensitivity: boolean
   sensitivity: number // 0–100: nível abaixo do qual o microfone é silenciado
-  noiseSuppression: boolean
+  /** Supressão de ruído: nenhuma, do navegador ou RNNoise (padrão, roda localmente). */
+  noiseMode: NoiseMode
   echoCancellation: boolean
   autoGainControl: boolean
   cameraQuality: '360p' | '720p' | '1080p'
@@ -54,7 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
     pttEnabled: false,
     autoSensitivity: true,
     sensitivity: 35,
-    noiseSuppression: true,
+    noiseMode: 'high',
     echoCancellation: true,
     autoGainControl: true,
     cameraQuality: '720p',
