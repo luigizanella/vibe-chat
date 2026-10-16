@@ -5,6 +5,7 @@ import {
 import clsx from 'clsx'
 import { AlertTriangle, Check, CheckCircle2, ChevronRight, Info, Loader2, X } from 'lucide-react'
 import { useUI, type MenuItem } from '@/store/ui'
+import { Layer } from './Layer'
 import { colorFromId, initials } from '@/lib/format'
 import { mediaUrl } from '@/lib/media'
 import type { Presence } from '@/lib/types'
@@ -218,56 +219,46 @@ export function ContextMenuHost() {
   const menu = useUI((s) => s.menu)
   const close = useUI((s) => s.closeMenu)
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-
-  useLayoutEffect(() => {
-    if (!menu || !ref.current) return
-    const r = ref.current.getBoundingClientRect()
-    setPos({
-      x: Math.max(8, Math.min(menu.x, window.innerWidth - r.width - 8)),
-      y: Math.max(8, Math.min(menu.y, window.innerHeight - r.height - 8)),
-    })
-  }, [menu])
 
   useEffect(() => {
     if (!menu) return
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) close()
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault()
-        const items = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
-        const i = items.indexOf(document.activeElement as HTMLButtonElement)
-        items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
-      }
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('blur', close)
-    window.addEventListener('resize', close)
+    const t = setTimeout(() => ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(), 30)
     window.addEventListener('scroll', close, true)
-    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('blur', close)
-      window.removeEventListener('resize', close)
+      clearTimeout(t)
       window.removeEventListener('scroll', close, true)
     }
   }, [menu, close])
 
   if (!menu) return null
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    const container = (e.target as HTMLElement).closest('[role="menu"]')
+    if (!container) return
+    e.preventDefault()
+    const items = [...container.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
+    const i = items.indexOf(document.activeElement as HTMLButtonElement)
+    items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
+  }
   return (
-    <div ref={ref} className="menu" role="menu" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
-      <MenuList items={menu.items} onClose={close} />
-    </div>
+    <Layer anchor={{ x: menu.x, y: menu.y }} placement="bottom-start" gap={2} onDismiss={close} closeOnScroll onKeyDown={onKey}>
+      <div ref={ref} className="menu" role="menu">
+        <MenuList items={menu.items} onClose={close} />
+      </div>
+    </Layer>
   )
 }
-
 function MenuRow({ it, onClose }: { it: MenuItem; onClose: () => void }) {
   const [open, setOpen] = useState(false)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const enter = () => {
+    clearTimeout(timer.current)
+    if (!it.disabled) setOpen(true)
+  }
+  const leave = () => {
+    timer.current = setTimeout(() => setOpen(false), 160)
+  }
   const [val, setVal] = useState(it.value ?? 0)
   const [checked, setChecked] = useState(!!it.checked)
   if (it.separator) return <div className="menu-sep" role="separator" />
@@ -323,7 +314,7 @@ function MenuRow({ it, onClose }: { it: MenuItem; onClose: () => void }) {
 
   if (it.children) {
     return (
-      <div className="relative" onMouseEnter={() => !it.disabled && setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div ref={rowRef} onMouseEnter={enter} onMouseLeave={leave}>
         <button
           role="menuitem"
           aria-haspopup="menu"
@@ -338,15 +329,28 @@ function MenuRow({ it, onClose }: { it: MenuItem; onClose: () => void }) {
           <span className="flex items-center gap-2">{it.icon}{it.label}</span>
           <ChevronRight size={14} aria-hidden />
         </button>
-        {open && (
-          <div className="menu absolute top-[-6px] left-full ml-1" role="menu" style={{ position: 'absolute' }}>
-            <MenuList items={it.children} onClose={onClose} />
-          </div>
+        {open && rowRef.current && (
+          <Layer
+            anchor={rowRef.current}
+            placement="right-start"
+            gap={2}
+            align={-6}
+            dismissOutside={false}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') {
+                setOpen(false)
+                rowRef.current?.querySelector('button')?.focus()
+              }
+            }}
+          >
+            <div className="menu" role="menu" onMouseEnter={enter} onMouseLeave={leave}>
+              <MenuList items={it.children} onClose={onClose} />
+            </div>
+          </Layer>
         )}
       </div>
     )
   }
-
   return (
     <button
       role="menuitem"
@@ -443,19 +447,23 @@ export function TooltipHost() {
       window.removeEventListener('scroll', out, true)
     }
   }, [])
-  return <div id="tooltip-host" ref={ref} role="tooltip" data-show="false" />
+  return <div id="tooltip-host" ref={ref} popover="manual" role="tooltip" data-show="false" />
 }
 
 /* ------------------------------------------------------------------ Toasts */
 export function ToastHost() {
+  const hostRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    try {
+      hostRef.current?.showPopover?.()
+    } catch {
+      /* sem suporte */
+    }
+  }, [])
   const toasts = useUI((s) => s.toasts)
   const dismiss = useUI((s) => s.dismissToast)
   return (
-    <div
-      className="pointer-events-none fixed right-4 bottom-4 left-4 flex flex-col items-end gap-2 sm:left-auto"
-      style={{ zIndex: 'var(--z-toast)' as unknown as number }}
-      aria-live="polite"
-    >
+    <div id="toast-host" ref={hostRef} popover="manual" aria-live="polite">
       {toasts.map((t) => (
         <div
           key={t.id}

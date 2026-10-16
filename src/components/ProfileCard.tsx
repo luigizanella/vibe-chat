@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, MoreHorizontal, SendHorizontal } from 'lucide-react'
@@ -13,52 +13,22 @@ import { sendMessage } from '@/data/messages'
 import { usePresenceOf } from '@/data/presence'
 import { Avatar, PRESENCE_LABEL, Spinner } from '@/components/ui'
 import { useLocalNick, useUserMenu } from '@/components/userMenu'
+import { Layer } from '@/components/Layer'
 import { Linkified } from '@/components/Linkified'
 
-/** Cartão de perfil flutuante (popover). */
+/** Cartão de perfil flutuante (camada única, acima de modais e menus abertos antes dele). */
 export function ProfileCardHost() {
   const card = useUI((s) => s.profileCard)
   const close = useUI((s) => s.closeProfile)
-  const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
-
-  useLayoutEffect(() => {
-    if (!card || !ref.current) return
-    const r = ref.current.getBoundingClientRect()
-    setPos({
-      x: Math.max(8, Math.min(card.x + 8, window.innerWidth - r.width - 8)),
-      y: Math.max(8, Math.min(card.y, window.innerHeight - r.height - 8)),
-    })
-  }, [card])
-
-  useEffect(() => {
-    if (!card) return
-    const down = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) close()
-    }
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && close()
-    window.addEventListener('mousedown', down)
-    window.addEventListener('keydown', key)
-    return () => {
-      window.removeEventListener('mousedown', down)
-      window.removeEventListener('keydown', key)
-    }
-  }, [card, close])
-
   if (!card) return null
   return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-label="Perfil do usuário"
-      className="fixed w-[min(340px,94vw)] overflow-hidden rounded-lg border border-border bg-[var(--bg-tertiary)] text-fg shadow-[var(--shadow)]"
-      style={{ left: pos.x, top: pos.y, zIndex: 'var(--z-menu)' as unknown as number, animation: 'pop-in var(--dur-fast) var(--ease)' }}
-    >
-      <CardBody userId={card.userId} serverId={card.serverId} onClose={close} />
-    </div>
+    <Layer anchor={{ x: card.x, y: card.y }} placement="right-start" gap={8} onDismiss={close} label="Perfil do usuário" role="dialog">
+      <div className="w-[min(340px,94vw)] max-h-[calc(100vh-16px)] overflow-y-auto rounded-lg border border-border bg-[var(--bg-tertiary)] text-fg shadow-[var(--shadow)]">
+        <CardBody userId={card.userId} serverId={card.serverId} onClose={close} />
+      </div>
+    </Layer>
   )
 }
-
 function CardBody({ userId, serverId, onClose }: { userId: string; serverId: string | null; onClose: () => void }) {
   const { data: p, isLoading } = useProfile(userId)
   const status = usePresenceOf(userId)

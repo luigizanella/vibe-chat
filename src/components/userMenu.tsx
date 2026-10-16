@@ -27,7 +27,7 @@ export function useLocalNick() {
   return useCallback((userId: string, fallback: string) => nicks[userId] || fallback, [nicks])
 }
 
-function NicknameModal({ userId, serverId, isSelf, current, name }: { userId: string; serverId: string | null; isSelf: boolean; current: string; name: string }) {
+export function NicknameModal({ userId, serverId, isSelf, current, name }: { userId: string; serverId: string | null; isSelf: boolean; current: string; name: string }) {
   const close = useCloseModal()
   const update = useSettings((s) => s.update)
   const qc = useQueryClient()
