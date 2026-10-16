@@ -55,7 +55,6 @@ export function NotificationsTab() {
   const [perm, setPerm] = useState<NotifPermission>('default')
   useEffect(() => void notificationPermission().then(setPerm), [])
   const n = settings.notifications
-  const s = settings.sounds
   const removePref = async (id: string) => {
     const { error } = await supabase.from('notification_prefs').delete().eq('id', id)
     if (error) return toast.error(errorMessage(error))
@@ -71,16 +70,6 @@ export function NotificationsTab() {
       <SettingRow title="Somente menções nos servidores" description="Mensagens diretas sempre notificam."><Toggle checked={n.mentionsOnly} onChange={(v) => update({ notifications: { ...n, mentionsOnly: v } })} label="Somente menções" /></SettingRow>
       <SettingRow title="Silenciar notificações durante chamadas" description="Sem pop-ups do sistema enquanto você estiver em voz."><Toggle checked={n.muteInCall} onChange={(v) => update({ notifications: { ...n, muteInCall: v } })} label="Silenciar em chamadas" /></SettingRow>
       <SettingRow title="Piscar título da aba" description="Chama atenção quando chega mensagem e a janela está em segundo plano."><Toggle checked={n.flashTitle} onChange={(v) => update({ notifications: { ...n, flashTitle: v } })} label="Piscar título" /></SettingRow>
-      <div className="divider" />
-      <h3 className="mt-0">Sons</h3>
-      <SettingRow title="Ativar sons"><Toggle checked={s.enabled} onChange={(v) => update({ sounds: { ...s, enabled: v } })} label="Ativar sons" /></SettingRow>
-      <SettingRow title="Nova mensagem"><Toggle checked={s.message} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, message: v } })} label="Som de mensagem" /></SettingRow>
-      <SettingRow title="Menção"><Toggle checked={s.mention} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, mention: v } })} label="Som de menção" /></SettingRow>
-      <SettingRow title="Entrar/sair de chamada"><Toggle checked={s.call} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, call: v } })} label="Som de chamada" /></SettingRow>
-      <SettingRow title="Mudo, ensurdecer e voltar"><Toggle checked={s.voiceState} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, voiceState: v } })} label="Som de mudo e ensurdecer" /></SettingRow>
-      <SettingRow title="Transmissões de tela" description="Quando você ou alguém começa ou para de transmitir."><Toggle checked={s.stream} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, stream: v } })} label="Som de transmissão" /></SettingRow>
-      <div className="field mt-2"><label htmlFor="vol">Volume dos sons: {Math.round(s.volume * 100)}%</label>
-        <div className="flex items-center gap-3"><input id="vol" className="flex-1" type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => update({ sounds: { ...s, volume: Number(e.target.value) } })} /><button className="btn btn-sm" onClick={() => playSound('mention')}>Testar</button></div></div>
       <div className="divider" />
       <h3 className="mt-0">Servidores e canais silenciados</h3>
       {!muted.length ? <p className="text-fg-muted">Nada silenciado. Clique com o botão direito em um servidor ou canal para ajustar.</p> : muted.map((p) => (
@@ -273,6 +262,24 @@ export function DiagnosticsTab() {
         <dt>Plataforma</dt><dd>{isTauri ? 'Aplicativo desktop (Tauri)' : 'Navegador'}</dd>
         <dt>Backend</dt><dd>{env.supabaseUrl}</dd><dt>Navegador</dt><dd className="break-all">{navigator.userAgent}</dd>
       </dl>
+    </div>
+  )
+}
+
+export function SoundsTab() {
+  const { settings, update } = useSettings()
+  const s = settings.sounds
+  return (
+    <div className="max-w-xl">
+      <H>Sons</H>
+      <SettingRow title="Ativar sons"><Toggle checked={s.enabled} onChange={(v) => update({ sounds: { ...s, enabled: v } })} label="Ativar sons" /></SettingRow>
+      <SettingRow title="Nova mensagem"><Toggle checked={s.message} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, message: v } })} label="Som de mensagem" /></SettingRow>
+      <SettingRow title="Menção"><Toggle checked={s.mention} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, mention: v } })} label="Som de menção" /></SettingRow>
+      <SettingRow title="Entrar/sair de chamada"><Toggle checked={s.call} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, call: v } })} label="Som de chamada" /></SettingRow>
+      <SettingRow title="Mudo, ensurdecer e voltar"><Toggle checked={s.voiceState} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, voiceState: v } })} label="Som de mudo e ensurdecer" /></SettingRow>
+      <SettingRow title="Transmissões de tela" description="Quando você ou alguém começa ou para de transmitir."><Toggle checked={s.stream} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, stream: v } })} label="Som de transmissão" /></SettingRow>
+      <div className="field mt-2"><label htmlFor="vol">Volume dos sons: {Math.round(s.volume * 100)}%</label>
+        <div className="flex items-center gap-3"><input id="vol" className="flex-1" type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => update({ sounds: { ...s, volume: Number(e.target.value) } })} /><button className="btn btn-sm" onClick={() => playSound('mention')}>Testar</button></div></div>
     </div>
   )
 }

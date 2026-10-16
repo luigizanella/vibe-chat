@@ -8,7 +8,7 @@ import { formatDate } from '@/lib/format'
 import { mediaUrl, removePublicFile, uploadPublicImage } from '@/lib/media'
 import { useSession } from '@/store/session'
 import { toast } from '@/store/ui'
-import { Avatar, ConfirmModal, SettingRow, Spinner, useAction } from '@/components/ui'
+import { Avatar, ConfirmModal, Modal, SettingRow, Spinner, useAction, useCloseModal } from '@/components/ui'
 import { useBlocks, qk } from '@/data/queries'
 import { useUI } from '@/store/ui'
 import type { Profile } from '@/lib/types'
@@ -106,52 +106,71 @@ export function ProfileTab() {
   )
 }
 
+/** Linha "rótulo / valor / Editar" da tela de conta. */
+function InfoRow({ label, value, onEdit, hint }: { label: string; value: string; onEdit?: () => void; hint?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <div className="min-w-0">
+        <div className="text-xs font-bold text-fg-muted uppercase">{label}</div>
+        <div className="truncate">{value}</div>
+        {hint && <div className="text-xs text-fg-muted">{hint}</div>}
+      </div>
+      {onEdit && <button className="btn btn-sm shrink-0" onClick={onEdit}>Editar</button>}
+    </div>
+  )
+}
+
+function EditFieldModal({ title, label, initial, type = 'text', maxLength = 64, validate, onSave }: { title: string; label: string; initial: string; type?: string; maxLength?: number; validate?: (v: string) => string | null; onSave: (v: string) => Promise<void> }) {
+  const close = useCloseModal()
+  const [v, setV] = useState(initial)
+  const { busy, run } = useAction()
+  const problem = validate?.(v) ?? null
+  const save = () => run(async () => { await onSave(v.trim()); close() })
+  return (
+    <Modal title={title} footer={<><button className="btn btn-ghost" onClick={close}>Cancelar</button><button className="btn btn-primary" disabled={busy || !!problem || v.trim() === initial} onClick={() => void save()}>{busy && <Spinner size={14} />} Salvar</button></>}>
+      <div className="field"><label htmlFor="ef">{label}</label>
+        <input id="ef" className="input" type={type} maxLength={maxLength} value={v} autoFocus onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !problem && void save()} aria-invalid={!!problem} />
+        {problem && v.trim() !== initial && <span className="error-text">{problem}</span>}
+      </div>
+    </Modal>
+  )
+}
+
 export function AccountTab() {
-  const { user, profile, signOut } = useSession()
+  const { user, profile, signOut, setProfile } = useSession()
   const open = useUI((s) => s.openModal)
-  const [email, setEmail] = useState('')
-  const [cur, setCur] = useState('')
-  const [pw, setPw] = useState('')
-  const [pw2, setPw2] = useState('')
-  const emailOp = useAction()
-  const pwOp = useAction()
+  const qc = useQueryClient()
+  if (!user || !profile) return null
 
-  const changeEmail = () => emailOp.run(async () => {
-    const { error } = await supabase.auth.updateUser({ email: email.trim() }, { emailRedirectTo: `${appOrigin()}/login` })
+  const saveProfile = async (patch: Partial<Profile>) => {
+    const { data, error } = await supabase.from('profiles').update(patch).eq('id', user.id).select().single()
     if (error) throw error
-    toast.success('Enviamos links de confirmação. Confirme no(s) e-mail(s) para concluir a troca.')
-    setEmail('')
-  })
-
-  const changePw = () => pwOp.run(async () => {
-    if (pw !== pw2) throw new Error('As senhas não coincidem.')
-    // reautenticação com a senha atual antes de trocar
-    const { error: authErr } = await supabase.auth.signInWithPassword({ email: user!.email!, password: cur })
-    if (authErr) throw new Error('Senha atual incorreta.')
-    const { error } = await supabase.auth.updateUser({ password: pw })
-    if (error) throw error
-    toast.success('Senha alterada.')
-    setCur(''); setPw(''); setPw2('')
-  })
+    setProfile(data as Profile)
+    void qc.invalidateQueries({ queryKey: qk.profile(user.id) })
+    toast.success('Atualizado.')
+  }
 
   return (
     <div className="max-w-xl">
       <H>Conta</H>
-      <div className="card mb-6"><div className="label">E-mail atual</div><div>{user?.email}</div></div>
-
-      <h3 className="mt-0">Alterar e-mail</h3>
-      <div className="flex gap-2"><input className="input" type="email" placeholder="novo@email.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Novo e-mail" /><button className="btn btn-primary" disabled={emailOp.busy || !email} onClick={() => void changeEmail()}>Alterar</button></div>
-
-      <h3 className="mt-8">Alterar senha</h3>
-      <div className="flex flex-col gap-3">
-        <input className="input" type="password" placeholder="Senha atual" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" aria-label="Senha atual" />
-        <input className="input" type="password" placeholder="Nova senha (mín. 8)" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" aria-label="Nova senha" />
-        <input className="input" type="password" placeholder="Confirmar nova senha" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" aria-label="Confirmar nova senha" />
-        <button className="btn btn-primary self-start" disabled={pwOp.busy || !cur || pw.length < 8} onClick={() => void changePw()}>{pwOp.busy && <Spinner size={14} />} Alterar senha</button>
+      <div className="card mb-6">
+        <h3 className="mt-0 mb-1 text-base">Informações da conta</h3>
+        <InfoRow label="Nome de exibição" value={profile.display_name || '—'} onEdit={() => open(<EditFieldModal title="Nome de exibição" label="Nome de exibição" initial={profile.display_name} maxLength={32} validate={(v) => (v.trim() ? null : 'Informe um nome.')} onSave={(v) => saveProfile({ display_name: v })} />)} />
+        <InfoRow label="Nome de usuário" value={`@${profile.username}`} onEdit={() => open(<EditFieldModal title="Nome de usuário" label="Nome de usuário" initial={profile.username} maxLength={32} validate={(v) => (/^[a-z0-9_.]{2,32}$/.test(v.trim().toLowerCase()) ? null : 'Use 2–32 letras minúsculas, números, “_” ou “.”.')} onSave={async (v) => {
+          const u = v.toLowerCase()
+          const { data } = await supabase.rpc('username_available', { p_username: u })
+          if (!data) throw new Error('Este nome de usuário já está em uso.')
+          await saveProfile({ username: u })
+        }} />)} />
+        <InfoRow label="E-mail" value={user.email ?? '—'} hint="A troca exige confirmação por e-mail." onEdit={() => open(<EditFieldModal title="Alterar e-mail" label="Novo e-mail" type="email" initial="" maxLength={120} validate={(v) => (/^\S+@\S+\.\S+$/.test(v.trim()) ? null : 'E-mail inválido.')} onSave={async (v) => {
+          const { error } = await supabase.auth.updateUser({ email: v }, { emailRedirectTo: `${appOrigin()}/login` })
+          if (error) throw error
+          toast.success('Enviamos links de confirmação. Confirme no(s) e-mail(s) para concluir a troca.')
+        }} />)} />
+        <InfoRow label="Conta criada em" value={formatDate(profile.created_at)} />
       </div>
 
-      <div className="divider my-8" />
-      <h3 className="mt-0 text-danger">Zona de perigo</h3>
+      <h3 className="mt-8 text-danger">Remoção da conta</h3>
       <SettingRow title="Desativar conta" description="Você fica invisível e não pode enviar mensagens. Pode reativar ao entrar novamente.">
         <button className="btn btn-danger" onClick={() => open(<ConfirmModal title="Desativar conta" message="Sua conta ficará invisível. Você poderá reativá-la quando entrar de novo." confirmLabel="Desativar" danger onConfirm={async () => { await rpc('deactivate_account'); await signOut() }} />)}>Desativar</button>
       </SettingRow>
@@ -162,15 +181,52 @@ export function AccountTab() {
           await signOut()
         }} />)}>Excluir</button>
       </SettingRow>
-      <p className="hint mt-4">Conectado como @{profile?.username}.</p>
     </div>
   )
 }
 
+export function SecurityTab() {
+  const { user } = useSession()
+  const [cur, setCur] = useState('')
+  const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const pwOp = useAction()
+  const changePw = () => pwOp.run(async () => {
+    if (pw !== pw2) throw new Error('As senhas não coincidem.')
+    // reautenticação com a senha atual antes de trocar
+    const { error: authErr } = await supabase.auth.signInWithPassword({ email: user!.email!, password: cur })
+    if (authErr) throw new Error('Senha atual incorreta.')
+    const { error } = await supabase.auth.updateUser({ password: pw })
+    if (error) throw error
+    toast.success('Senha alterada.')
+    setCur(''); setPw(''); setPw2('')
+  })
+  return (
+    <div className="max-w-xl">
+      <H>Senha e segurança</H>
+      <h3 className="mt-0">Alterar senha</h3>
+      <div className="flex flex-col gap-3">
+        <input className="input" type="password" placeholder="Senha atual" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" aria-label="Senha atual" />
+        <input className="input" type="password" placeholder="Nova senha (mín. 8)" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" aria-label="Nova senha" />
+        <input className="input" type="password" placeholder="Confirmar nova senha" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" aria-label="Confirmar nova senha" />
+        <button className="btn btn-primary self-start" disabled={pwOp.busy || !cur || pw.length < 8} onClick={() => void changePw()}>{pwOp.busy && <Spinner size={14} />} Alterar senha</button>
+      </div>
+      <div className="divider" />
+      <SettingRow title="Autenticação em dois fatores" description="Em breve."><span className="rounded bg-tertiary px-2 py-0.5 text-xs text-fg-muted">Em breve</span></SettingRow>
+    </div>
+  )
+}
+
+export function SoonTab({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div className="max-w-xl">
+      <H>{title}</H>
+      <div className="card text-fg-2"><strong className="text-fg">Em breve.</strong> {children ?? 'Esta área ainda não foi implementada nesta versão.'}</div>
+    </div>
+  )
+}
 export function PrivacyTab() {
   const { user } = useSession()
-  const qc = useQueryClient()
-  const { data: blocked, isLoading } = useBlocks()
   const [prefs, setPrefs] = useState<{ dm_policy: string; friend_requests: string } | null>(null)
   useEffect(() => {
     if (!user) return
@@ -198,8 +254,16 @@ export function PrivacyTab() {
           </SettingRow>
         </>
       )}
-      <div className="divider" />
-      <h3>Usuários bloqueados</h3>
+    </div>
+  )
+}
+
+export function BlockedTab() {
+  const qc = useQueryClient()
+  const { data: blocked, isLoading } = useBlocks()
+  return (
+    <div className="max-w-xl">
+      <H>Usuários bloqueados</H>
       {isLoading ? <Spinner /> : !blocked?.length ? <p className="text-fg-muted">Você não bloqueou ninguém.</p> : blocked.map((p) => (
         <div key={p.id} className="flex items-center gap-3 border-b border-border py-2">
           <Avatar path={p.avatar_path} name={p.display_name} id={p.id} size={32} />
