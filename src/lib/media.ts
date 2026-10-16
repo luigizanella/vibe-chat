@@ -14,6 +14,7 @@ export function validateImage(file: File): string | null {
 /** URL pública de mídia no bucket "public-media" (avatares, banners, ícones). */
 export function mediaUrl(path: string | null | undefined): string | null {
   if (!path) return null
+  if (path === 'app:logo') return '/logo.png' // avatar embutido (ex.: bot Vibe Beats)
   return supabase.storage.from('public-media').getPublicUrl(path).data.publicUrl
 }
 

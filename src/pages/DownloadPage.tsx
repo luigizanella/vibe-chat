@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Download, Globe, MessageCircle, ShieldAlert } from 'lucide-react'
+import { Download, Globe, ShieldAlert } from 'lucide-react'
 import { Spinner } from '@/components/ui'
 
 const REPO = 'luigizanella/vibe-chat'
@@ -28,7 +28,7 @@ export function DownloadPage() {
     <main className="min-h-full overflow-y-auto p-4" style={{ background: 'radial-gradient(1200px 600px at 20% -10%, var(--accent-soft), transparent), var(--bg-tertiary)' }}>
       <div className="mx-auto my-8 w-full max-w-xl rounded-xl border border-border bg-primary p-6 shadow-[var(--shadow)] sm:p-8">
         <div className="mb-5 flex flex-col items-center text-center">
-          <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent text-white"><MessageCircle size={26} /></div>
+          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-16 w-16 rounded-2xl" draggable={false} />
           <h1 className="m-0 text-2xl font-bold">Vibe Chat</h1>
           <p className="mt-1 mb-0 text-fg-2">Escolha como quer usar.</p>
         </div>

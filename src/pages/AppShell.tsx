@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Bell, HelpCircle, Hash, MessageSquare, Search, Volume2, WifiOff, X } from 'lucide-react'
+import { Bell, Hash, MessageSquare, Volume2, WifiOff, X } from 'lucide-react'
 import { useRealtimeSync } from '@/data/realtime'
 import { usePresenceManager } from '@/data/presence'
+import { useVoiceModeration } from '@/data/voiceModeration'
+import { MusicHost } from '@/components/music/MusicHost'
 import { qk, useDMs, useFriends, useServers, useUnread } from '@/data/queries'
 import { useSession } from '@/store/session'
 import { useSettings } from '@/store/settings'
@@ -176,10 +178,10 @@ function Banners() {
     <>
       {!online && <div className="flex items-center justify-center gap-2 bg-warning px-3 py-1.5 text-sm font-semibold text-black" role="alert"><WifiOff size={15} /> Sem conexão — tentando reconectar…</div>}
       {online && perm === 'default' && !dismissed && (
-        <div className="flex items-center justify-center gap-3 bg-[var(--accent)] px-3 py-1.5 text-sm text-white">
+        <div className="flex items-center justify-center gap-3 bg-[var(--accent)] px-3 py-1.5 text-sm text-[var(--accent-contrast)]">
           <Bell size={15} /> Receba avisos de mensagens e menções mesmo com o app em segundo plano.
           <button className="btn btn-sm" onClick={() => void requestNotificationPermission().then((p) => { setPerm(p); localStorage.setItem('vibe.notifPrompt', '1') })}>Ativar</button>
-          <button className="icon-btn h-6 w-6 text-white" aria-label="Dispensar" onClick={() => { localStorage.setItem('vibe.notifPrompt', '1'); setDismissed(true) }}><X size={14} /></button>
+          <button className="icon-btn h-6 w-6 text-[var(--accent-contrast)]" aria-label="Dispensar" onClick={() => { localStorage.setItem('vibe.notifPrompt', '1'); setDismissed(true) }}><X size={14} /></button>
         </div>
       )}
     </>
@@ -189,6 +191,7 @@ function Banners() {
 /* ------------------------------------------------------------------- Shell */
 export function AppShell() {
   useRealtimeSync()
+  useVoiceModeration()
   usePresenceManager()
   useGlobalKeybinds()
   const { serverId } = useParams()
@@ -226,17 +229,14 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1">
         <div className={clsx('flex shrink-0', mobilePane === 'nav' ? 'max-md:w-full' : 'max-md:hidden')}>
           <div className="relative w-[var(--rail-width)] shrink-0">
-            <ServerRail />
-            <div className="absolute bottom-2 left-0 flex w-full flex-col items-center gap-1 bg-[var(--bg-rail)] pt-1">
-              <button className="icon-btn" onClick={() => setQuick(true)} aria-label="Busca rápida (Ctrl+K)" data-tip="Busca rápida (Ctrl+K)" data-tip-side="right"><Search size={18} /></button>
-              <button className="icon-btn" onClick={() => openModal(<HelpModal />)} aria-label="Ajuda e atalhos" data-tip="Ajuda e atalhos (Ctrl+/)" data-tip-side="right"><HelpCircle size={18} /></button>
-            </div>
+            <ServerRail onSearch={() => setQuick(true)} onHelp={() => openModal(<HelpModal />)} />
           </div>
           <div className="w-[var(--sidebar-width)] min-w-0 max-md:flex-1 md:shrink-0">{serverId ? <ChannelSidebar key={serverId} serverId={serverId} /> : <HomeSidebar />}</div>
         </div>
         <div className={clsx('min-w-0 flex-1', mobilePane === 'nav' && 'max-md:hidden')}><Outlet /></div>
       </div>
       <QuickSwitcher />
+      <MusicHost />
     </div>
   )
 }

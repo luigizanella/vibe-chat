@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { contrastColor } from '@/lib/color'
 
 export interface VoiceSettings {
   inputId: string // dispositivos são locais da máquina: não sincronizam
@@ -12,8 +13,8 @@ export interface VoiceSettings {
   echoCancellation: boolean
   autoGainControl: boolean
   cameraQuality: '360p' | '720p' | '1080p'
-  screenQuality: '720p' | '1080p' | '1440p'
-  screenFps: 15 | 30 | 60
+  screenQuality: '720p' | '1080p'
+  screenFps: 30 | 60
   screenAudio: boolean
   joinMuted: boolean
 }
@@ -30,11 +31,15 @@ export interface Settings {
   keybinds: { pushToTalk: string; toggleMute: string; toggleDeafen: string; quickSwitcher: string }
   voice: VoiceSettings
   desktop: { autostart: boolean; closeToTray: boolean }
+  /** Apelidos locais que VOCÊ dá às outras pessoas (só você vê). */
+  nicknames: Record<string, string>
+  /** Volume do bot de música (0–100), só para você. */
+  musicVolume: number
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
-  accent: '#7c6cff',
+  accent: '#6b5bff',
   scale: 1,
   language: 'pt-BR',
   compact: false,
@@ -48,7 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
     cameraId: '',
     pttEnabled: false,
     autoSensitivity: true,
-    sensitivity: 20,
+    sensitivity: 35,
     noiseSuppression: true,
     echoCancellation: true,
     autoGainControl: true,
@@ -59,12 +64,16 @@ export const DEFAULT_SETTINGS: Settings = {
     joinMuted: false,
   },
   desktop: { autostart: false, closeToTray: true },
+  nicknames: {},
+  musicVolume: 60,
 }
 
 const LS_KEY = 'vibe.settings.v1'
 
 function deepMerge<T>(base: T, patch: unknown): T {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return base
+  // mapas livres (ex.: apelidos): base vazia aceita todas as chaves do patch
+  if (base && typeof base === 'object' && !Array.isArray(base) && Object.keys(base as object).length === 0) return patch as T
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) }
   for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
     if (!(k in out)) continue
@@ -114,7 +123,8 @@ export function applySettings(s: Settings): void {
   const [h, sat, l] = hexToHsl(s.accent)
   root.style.setProperty('--accent-h', String(h))
   root.style.setProperty('--accent-s', `${sat}%`)
-  root.style.setProperty('--accent-l', `${Math.min(Math.max(l, 45), 75)}%`)
+  root.style.setProperty('--accent-l', `${l}%`)
+  root.style.setProperty('--accent-contrast', contrastColor(s.accent))
   root.style.setProperty('--ui-scale', String(s.scale))
   root.dataset.compact = String(s.compact)
 }

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { BellOff, Check, Compass, LogOut, MessageCircle, Plus, Settings, UserPlus } from 'lucide-react'
+import { BellOff, Check, Compass, HelpCircle, LogOut, Plus, Search, Settings, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useUI } from '@/store/ui'
 import { markChannelsRead, setNotifPref, findPref } from '@/data/actions'
@@ -15,9 +15,12 @@ import { useSession } from '@/store/session'
 
 function RailItem({ active, tip, to, onContext, children, indicator, badge }: { active?: boolean; tip: string; to: string; onContext?: (e: React.MouseEvent) => void; children: React.ReactNode; indicator?: 'unread' | 'none'; badge?: number }) {
   return (
-    <div className="relative flex w-full justify-center" onContextMenu={onContext}>
-      <span className={clsx('absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r bg-white transition-all', active ? 'h-10' : indicator === 'unread' ? 'h-2' : 'h-0')} aria-hidden />
-      <NavLink to={to} className="relative block rounded-[24px] outline-offset-2 transition-[border-radius] duration-150 hover:rounded-[16px]" style={{ borderRadius: active ? 16 : undefined }} aria-label={tip} data-tip={tip} data-tip-side="right" aria-current={active ? 'page' : undefined}>
+    <div className="group relative flex w-full justify-center" onContextMenu={onContext}>
+      <span
+        className={clsx('absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r-full bg-[var(--text-primary)] transition-[height] duration-150', active ? 'h-10' : indicator === 'unread' ? 'h-2 group-hover:h-5' : 'h-0 group-hover:h-5')}
+        aria-hidden
+      />
+      <NavLink to={to} className="relative block outline-offset-2" aria-label={tip} data-tip={tip} data-tip-side="right" aria-current={active ? 'page' : undefined}>
         {children}
         {!!badge && <span className="badge absolute -right-1 -bottom-1 ring-[3px] ring-[var(--bg-rail)]">{badge > 99 ? '99+' : badge}</span>}
       </NavLink>
@@ -25,7 +28,8 @@ function RailItem({ active, tip, to, onContext, children, indicator, badge }: { 
   )
 }
 
-export function ServerRail() {
+const railBtn = 'grid h-12 w-12 shrink-0 place-items-center rounded-[24px] border-0 bg-[var(--bg-primary)] text-[var(--success-text)] transition-all duration-150 hover:rounded-[16px] hover:bg-[var(--success)] hover:text-white'
+export function ServerRail({ onSearch, onHelp }: { onSearch: () => void; onHelp: () => void }) {
   const { serverId } = useParams()
   const qc = useQueryClient()
   const me = useSession((s) => s.user?.id)
@@ -90,22 +94,26 @@ export function ServerRail() {
   const homeActive = !serverId
 
   return (
-    <nav className="flex h-full flex-col items-center gap-2 overflow-y-auto overflow-x-hidden bg-[var(--bg-rail)] py-3 max-md:w-[72px]" aria-label="Servidores" style={{ scrollbarWidth: 'none' }}>
+    <nav className="flex h-full flex-col items-center gap-2 overflow-y-auto overflow-x-hidden bg-[var(--bg-rail)] py-3" aria-label="Servidores" style={{ scrollbarWidth: 'none' }}>
       <RailItem to="/app/@me" tip="Mensagens diretas" active={homeActive} badge={summary.dmUnread}>
-        <span className={clsx('grid h-12 w-12 place-items-center text-white transition-colors', homeActive ? 'rounded-2xl bg-accent' : 'rounded-[24px] bg-[var(--bg-primary)] hover:rounded-2xl hover:bg-accent')}><MessageCircle size={24} /></span>
+        <img src="/logo.png" alt="Início" draggable={false} className={clsx('h-12 w-12 object-cover transition-[border-radius] duration-150', homeActive ? 'rounded-[16px]' : 'rounded-[24px] group-hover:rounded-[16px]')} />
       </RailItem>
-      <div className="h-0.5 w-8 rounded bg-[var(--border-strong)]" />
+      <div className="h-0.5 w-8 shrink-0 rounded bg-[var(--border-strong)]" />
       {servers?.map((s) => {
         const sm = summary.out.get(s.id)
         const active = s.id === serverId
         return (
           <RailItem key={s.id} to={`/app/s/${s.id}`} tip={s.name} active={active} onContext={serverMenu(s)} indicator={sm?.unread ? 'unread' : 'none'} badge={sm?.mentions}>
-            <Avatar path={s.icon_path} name={s.name} id={s.id} size={48} square className={clsx('transition-[border-radius]', active ? '[&>span]:!rounded-2xl' : '[&>span]:!rounded-[24px] hover:[&>span]:!rounded-2xl')} />
+            <Avatar path={s.icon_path} name={s.name} id={s.id} size={48} square className={clsx('[&>span]:transition-[border-radius] [&>span]:duration-150', active ? '[&>span]:!rounded-[16px]' : '[&>span]:!rounded-[24px] group-hover:[&>span]:!rounded-[16px]')} />
           </RailItem>
         )
       })}
-      <button className="grid h-12 w-12 shrink-0 place-items-center rounded-[24px] border-0 bg-[var(--bg-primary)] text-success transition-all hover:rounded-2xl hover:bg-success hover:text-white" onClick={() => openModal(<CreateServerModal />)} aria-label="Adicionar um servidor" data-tip="Adicionar um servidor" data-tip-side="right"><Plus size={24} /></button>
-      <button className="grid h-12 w-12 shrink-0 place-items-center rounded-[24px] border-0 bg-[var(--bg-primary)] text-success transition-all hover:rounded-2xl hover:bg-success hover:text-white" onClick={() => openModal(<CreateServerModal initialTab="join" />)} aria-label="Entrar com um convite" data-tip="Entrar com um convite" data-tip-side="right"><Compass size={22} /></button>
+      <button className={railBtn} onClick={() => openModal(<CreateServerModal />)} aria-label="Adicionar um servidor" data-tip="Adicionar um servidor" data-tip-side="right"><Plus size={24} /></button>
+      <button className={railBtn} onClick={() => openModal(<CreateServerModal initialTab="join" />)} aria-label="Entrar com um convite" data-tip="Entrar com um convite" data-tip-side="right"><Compass size={22} /></button>
+      <div className="mt-auto flex flex-col items-center gap-1 pt-2">
+        <button className="icon-btn" onClick={onSearch} aria-label="Busca rápida (Ctrl+K)" data-tip="Busca rápida (Ctrl+K)" data-tip-side="right"><Search size={20} /></button>
+        <button className="icon-btn" onClick={onHelp} aria-label="Ajuda e atalhos" data-tip="Ajuda e atalhos (Ctrl+/)" data-tip-side="right"><HelpCircle size={20} /></button>
+      </div>
     </nav>
   )
 }

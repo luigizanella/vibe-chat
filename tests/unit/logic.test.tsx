@@ -8,6 +8,7 @@ import { errorMessage } from '@/lib/errors'
 import { comboFromEvent, matchCombo } from '@/lib/keys'
 import { formatBytes, initials, safeFileName, sameDay } from '@/lib/format'
 import { validateImage } from '@/lib/media'
+import { linkify } from '@/lib/linkify'
 import type { Member, Role, Server } from '@/lib/types'
 
 const U1 = '11111111-1111-4111-8111-111111111111'
@@ -80,11 +81,11 @@ describe('conversão de menções', () => {
 describe('permissões no cliente (apenas UI)', () => {
   const server = { id: 's', owner_id: 'owner' } as Server
   const roles: Role[] = [
-    { id: 'def', server_id: 's', name: 'Membro', color: '#fff', position: 0, permissions: ['send_messages'], is_default: true },
-    { id: 'mod', server_id: 's', name: 'Mod', color: '#0f0', position: 50, permissions: ['kick_members'], is_default: false },
-    { id: 'adm', server_id: 's', name: 'Adm', color: '#f00', position: 100, permissions: ['administrator'], is_default: false },
+    { id: 'def', server_id: 's', name: 'Membro', color: '#fff', position: 0, permissions: ['send_messages'], is_default: true, hoist: false },
+    { id: 'mod', server_id: 's', name: 'Mod', color: '#0f0', position: 50, permissions: ['kick_members'], is_default: false, hoist: true },
+    { id: 'adm', server_id: 's', name: 'Adm', color: '#f00', position: 100, permissions: ['administrator'], is_default: false, hoist: true },
   ]
-  const member = (id: string, rs: string[]): Member => ({ server_id: 's', user_id: id, nickname: null, joined_at: '', profile: null, member_roles: rs.map((r) => ({ role_id: r })) })
+  const member = (id: string, rs: string[]): Member => ({ server_id: 's', user_id: id, nickname: null, joined_at: '', timeout_until: null, voice_muted: false, voice_deafened: false, profile: null, member_roles: rs.map((r) => ({ role_id: r })) })
   const ctx = (m: Member): PermContext => ({ server, roles, member: m })
 
   it('dono tem tudo; administrador tem tudo; membro só o padrão', () => {
@@ -130,5 +131,24 @@ describe('utilitários', () => {
     expect(validateImage(new File(['x'], 'a.exe', { type: 'application/x-msdownload' }))).toMatch(/Formato/)
     const big = new File([new Uint8Array(6 * 1024 * 1024)], 'a.png', { type: 'image/png' })
     expect(validateImage(big)).toMatch(/grande/)
+  })
+})
+
+describe('linkify da biografia', () => {
+  it('só http e https viram link, em nova aba segura', () => {
+    const parts = linkify('Meu site: https://exemplo.com/a?b=1, e http://x.org.')
+    const links = parts.filter((p) => p.type === 'link')
+    expect(links.map((l) => (l as { href: string }).href)).toEqual(['https://exemplo.com/a?b=1', 'http://x.org/'])
+    expect(parts.map((p) => p.text).join('')).toBe('Meu site: https://exemplo.com/a?b=1, e http://x.org.')
+  })
+  it('esquemas perigosos e credenciais embutidas permanecem texto', () => {
+    for (const bad of ['javascript:alert(1)', 'data:text/html,<script>1</script>', 'file:///etc/passwd', 'vbscript:x', 'ftp://x.com', 'https://user:pass@evil.com', 'HTTPS://', 'http://']) {
+      expect(linkify(`oi ${bad} fim`).some((p) => p.type === 'link'), bad).toBe(false)
+    }
+  })
+  it('HTML não é interpretado e parênteses balanceados são mantidos', () => {
+    const parts = linkify('<a href="javascript:alert(1)">x</a> (https://pt.wikipedia.org/wiki/Foo_(bar)) <img src=x onerror=1>')
+    expect(parts.filter((p) => p.type === 'link').map((p) => (p as { href: string }).href)).toEqual(['https://pt.wikipedia.org/wiki/Foo_(bar)'])
+    expect(parts.map((p) => p.text).join('')).toContain('<img src=x onerror=1>')
   })
 })

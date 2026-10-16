@@ -5,13 +5,14 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
-import { BellOff, Check, ChevronDown, ChevronRight, Hash, LogOut, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus } from 'lucide-react'
+import { HeadphoneOff, Music, BellOff, Check, ChevronDown, ChevronRight, Hash, LogOut, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus } from 'lucide-react'
 import { rpc } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { hasPerm } from '@/lib/perms'
 import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useUnread } from '@/data/queries'
 import { findPref, markChannelsRead, setNotifPref } from '@/data/actions'
 import { useVoiceOccupants } from '@/data/presence'
+import { useServerMusic } from '@/data/music'
 import { useUI, toast } from '@/store/ui'
 import { useVoice } from '@/store/voice'
 import { useSession } from '@/store/session'
@@ -20,6 +21,7 @@ import { CategoryModal, ChannelModal, InviteModal } from '@/components/modals/Se
 import { ConfirmLeaveServer, ServerSettingsModal } from '@/components/modals/ServerSettings'
 import type { Category, Channel } from '@/lib/types'
 import { UserPanel, VoiceDock } from './UserPanel'
+import { useLocalNick, useUserMenu } from '@/components/userMenu'
 
 const COLLAPSE_KEY = 'vibe.collapsed'
 function loadCollapsed(): Record<string, boolean> {
@@ -45,6 +47,11 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const participants = useVoice((s) => s.participants)
   const voiceChannel = useVoice((s) => s.channelId)
   const openModal = useUI((s) => s.openModal)
+  const openProfile = useUI((s) => s.openProfile)
+  const userMenu = useUserMenu(serverId)
+  const localNick = useLocalNick()
+  const { data: sessions } = useServerMusic(ch.kind === 'voice' ? serverId : undefined)
+  const playing = sessions?.find((x) => x.channel_id === ch.id && x.status !== 'idle')
   const Icon = ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}>
@@ -66,19 +73,30 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
             <button className="icon-btn h-5 w-5" aria-label={`Editar ${ch.name}`} data-tip="Editar canal" onClick={(e) => { e.stopPropagation(); openModal(<ChannelModal serverId={serverId} channel={ch} />) }}><Settings size={13} /></button>
           </div>
         )}
-        {unread && !active && !muted && <span className="absolute top-1/2 -left-2 h-2 w-1 -translate-y-1/2 rounded-r bg-white" aria-hidden />}
+        {unread && !active && !muted && <span className="absolute top-1/2 -left-2 h-2 w-1 -translate-y-1/2 rounded-r bg-[var(--text-primary)]" aria-hidden />}
       </div>
-      {ch.kind === 'voice' && occupants.length > 0 && (
+      {ch.kind === 'voice' && (occupants.length > 0 || playing) && (
         <ul className="m-0 mb-1 list-none p-0 pl-7">
+          {playing && (
+            <li className="flex items-center gap-2 px-1 py-0.5 text-fg-2" title={playing.title ?? undefined}>
+              <Avatar path="app:logo" name="Vibe Beats" id="vibe-beats" size={24} />
+              <span className="min-w-0 flex-1 truncate">Vibe Beats</span>
+              <span className="rounded bg-[var(--accent)] px-1 text-[10px] leading-4 font-bold text-[var(--accent-contrast)]">APP</span>
+              <Music size={13} className="shrink-0 text-fg-muted" aria-label="Tocando música" />
+            </li>
+          )}
           {occupants.map((uid) => {
             const m = members?.find((x) => x.user_id === uid)
             const live = voiceChannel === ch.id ? participants.find((p) => p.identity === uid) : undefined
-            const name = m?.nickname || m?.profile?.display_name || m?.profile?.username || 'Membro'
+            const name = localNick(uid, m?.nickname || m?.profile?.display_name || m?.profile?.username || 'Membro')
             return (
-              <li key={uid} className="flex items-center gap-2 rounded px-1 py-0.5 text-fg-2">
-                <span className={clsx('rounded-full', live?.speaking && 'shadow-[0_0_0_2px_var(--success)]')}><Avatar path={m?.profile?.avatar_path} name={name} id={uid} size={20} /></span>
-                <span className="min-w-0 flex-1 truncate text-[13px]">{name}</span>
-                {live && !live.micOn && <MicOff size={12} className="text-fg-muted" aria-label="Microfone desligado" />}
+              <li key={uid} onContextMenu={(e) => userMenu(uid, e)}>
+                <button className="flex w-full items-center gap-2 rounded border-0 bg-transparent px-1 py-0.5 text-left text-fg-2 hover:bg-[var(--bg-hover)]" onClick={(e) => openProfile(uid, serverId, e.clientX + 12, e.clientY - 20)}>
+                <Avatar path={m?.profile?.avatar_path} name={name} id={uid} size={24} speaking={!!live?.speaking} />
+                <span className="min-w-0 flex-1 truncate">{name}</span>
+                {m?.voice_deafened && <HeadphoneOff size={14} className="text-[var(--danger-text)]" aria-label="Áudio desativado por um moderador" />}
+                {m?.voice_muted ? <MicOff size={14} className="text-[var(--danger-text)]" aria-label="Silenciado por um moderador" /> : live && !live.micOn && <MicOff size={14} className="text-fg-muted" aria-label="Microfone desligado" />}
+                </button>
               </li>
             )
           })}

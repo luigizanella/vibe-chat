@@ -1,18 +1,13 @@
 import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { Crown } from 'lucide-react'
+import { Clock, Crown } from 'lucide-react'
 import { highestRole } from '@/lib/perms'
+import { useReadable } from '@/lib/useReadable'
 import { useMembers, usePermCtx, useRoles } from '@/data/queries'
 import { presenceOfUser, usePresenceStore } from '@/data/presence'
 import { useSession } from '@/store/session'
 import { useUI } from '@/store/ui'
-import { rpc } from '@/lib/supabase'
-import { qk } from '@/data/queries'
-import { toast } from '@/store/ui'
-import { errorMessage } from '@/lib/errors'
 import { Avatar, CenterSpinner } from '@/components/ui'
-import { memberMenuItems } from '@/components/modals/MemberActions'
+import { useLocalNick, useUserMenu } from '@/components/userMenu'
 import type { Member, Presence, Role } from '@/lib/types'
 
 export function MemberList({ serverId }: { serverId: string }) {
@@ -21,19 +16,21 @@ export function MemberList({ serverId }: { serverId: string }) {
   const ctx = usePermCtx(serverId)
   const byTopic = usePresenceStore((s) => s.byTopic)
   const me = useSession((s) => s.user!.id)
-  const nav = useNavigate()
-  const qc = useQueryClient()
   const openProfile = useUI((s) => s.openProfile)
-  const openMenu = useUI((s) => s.openMenu)
+  const userMenu = useUserMenu(serverId)
+  const localNick = useLocalNick()
+  const readable = useReadable('secondary')
 
   const groups = useMemo(() => {
     if (!members || !roles) return []
     const status = (m: Member): Presence => (m.user_id === me ? presenceOfUser(byTopic, me) || 'online' : presenceOfUser(byTopic, m.user_id))
-    const online = members.filter((m) => status(m) !== 'offline' || m.user_id === me && m.profile?.status_pref !== 'invisible')
+    const online = members.filter((m) => m.profile?.is_bot || status(m) !== 'offline' || (m.user_id === me && m.profile?.status_pref !== 'invisible'))
     const offline = members.filter((m) => !online.includes(m))
     const buckets = new Map<string, { role: Role | null; items: Member[] }>()
     for (const m of online) {
-      const top = highestRole(roles, m)
+      // só cargos com "exibir separadamente" formam grupo; o maior deles define o grupo do membro
+      const mine = new Set(m.member_roles.map((r) => r.role_id))
+      const top = roles.filter((r) => r.hoist && !r.is_default && mine.has(r.id)).sort((a, b) => b.position - a.position)[0]
       const key = top?.id ?? 'online'
       const b = buckets.get(key) ?? { role: top ?? null, items: [] }
       b.items.push(m)
@@ -41,39 +38,41 @@ export function MemberList({ serverId }: { serverId: string }) {
     }
     const ordered = [...buckets.values()].sort((a, b) => (b.role?.position ?? -1) - (a.role?.position ?? -1))
     return [
-      ...ordered.map((b) => ({ key: b.role?.id ?? 'online', title: b.role?.name ?? 'Online', color: b.role?.color, items: b.items })),
-      ...(offline.length ? [{ key: 'offline', title: 'Offline', color: undefined, items: offline }] : []),
+      ...ordered.map((b) => ({ key: b.role?.id ?? 'online', title: b.role?.name ?? 'Online', items: b.items })),
+      ...(offline.length ? [{ key: 'offline', title: 'Offline', items: offline }] : []),
     ]
   }, [members, roles, byTopic, me])
 
   if (isLoading || !ctx) return <CenterSpinner />
 
-  const menuFor = (m: Member, e: React.MouseEvent) => {
-    e.preventDefault()
-    const items = memberMenuItems({
-      ctx, member: m, roles: roles ?? [], me, nav, qc,
-      openProfileAt: () => openProfile(m.user_id, serverId, e.clientX, e.clientY),
-      onBlock: () => void rpc('block_user', { p_user: m.user_id }).then(() => { toast.success('Usuário bloqueado.'); void qc.invalidateQueries({ queryKey: qk.blocks }) }, (err) => toast.error(errorMessage(err))),
-    })
-    openMenu(e.clientX, e.clientY, items)
-  }
-
   return (
     <div className="h-full overflow-y-auto bg-secondary px-2 pt-4 pb-6" aria-label="Membros do servidor">
       {groups.map((g) => (
         <section key={g.key} className="mb-4">
-          <h3 className="m-0 px-2 pb-1 text-xs font-bold tracking-wide text-fg-muted uppercase">{g.title} — {g.items.length}</h3>
+          <h3 className="m-0 px-2 pt-1 pb-1.5 text-xs font-bold tracking-wide text-fg-muted uppercase">{g.title} — {g.items.length}</h3>
           {g.items.map((m) => {
-            const st = g.key === 'offline' ? 'offline' : (presenceOfUser(byTopic, m.user_id) === 'offline' ? 'online' : presenceOfUser(byTopic, m.user_id))
+            const st: Presence = g.key === 'offline' ? 'offline' : presenceOfUser(byTopic, m.user_id) === 'offline' ? 'online' : presenceOfUser(byTopic, m.user_id)
+            const timedOut = !!m.timeout_until && new Date(m.timeout_until) > new Date()
             const top = roles ? highestRole(roles, m) : undefined
-            const name = m.nickname || m.profile?.display_name || m.profile?.username || 'Membro'
+            const name = localNick(m.user_id, m.nickname || m.profile?.display_name || m.profile?.username || 'Membro')
             return (
-              <button key={m.user_id} className="flex w-full items-center gap-2.5 rounded-md border-0 bg-transparent px-2 py-1 text-left hover:bg-[var(--bg-hover)]" style={{ opacity: g.key === 'offline' ? 0.5 : 1 }}
-                onClick={(e) => openProfile(m.user_id, serverId, e.clientX - 280, e.clientY)} onContextMenu={(e) => menuFor(m, e)} aria-label={`${name}, ${st}`}>
+              <button
+                key={m.user_id}
+                className="flex h-[42px] w-full items-center gap-3 rounded-md border-0 bg-transparent px-2 text-left hover:bg-[var(--bg-hover)]"
+                style={{ opacity: g.key === 'offline' ? 0.55 : 1 }}
+                onClick={(e) => openProfile(m.user_id, serverId, e.clientX - 350, e.clientY)}
+                onContextMenu={(e) => userMenu(m.user_id, e)}
+                aria-label={`${name}, ${st}`}
+              >
                 <Avatar path={m.profile?.avatar_path} name={name} id={m.user_id} size={32} status={st} ring="var(--bg-secondary)" />
                 <span className="min-w-0 leading-tight">
-                  <span className="flex items-center gap-1 truncate font-semibold" style={{ color: top?.color }}>{name}{ctx.server.owner_id === m.user_id && <Crown size={12} className="text-warning" aria-label="Dono" />}</span>
-                  {m.profile?.custom_status && <span className="block truncate text-[11px] text-fg-muted">{m.profile.custom_status}</span>}
+                  <span className="flex items-center gap-1 truncate font-medium" style={{ color: readable(top?.color) ?? 'var(--text-secondary)' }}>
+                    {name}
+                    {ctx.server.owner_id === m.user_id && <Crown size={14} className="shrink-0 text-warning" aria-label="Dono do servidor" />}
+                    {timedOut && <Clock size={13} className="shrink-0 text-warning" aria-label="De castigo" />}
+                    {m.profile?.is_bot && <span className="shrink-0 rounded bg-[var(--accent)] px-1 text-[10px] leading-4 font-bold text-[var(--accent-contrast)]" aria-label="Aplicativo (bot)">APP</span>}
+                  </span>
+                  {m.profile?.custom_status && <span className="block truncate text-xs text-fg-muted">{m.profile.custom_status}</span>}
                 </span>
               </button>
             )

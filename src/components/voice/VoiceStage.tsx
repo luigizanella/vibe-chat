@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Headphones, HeadphoneOff, Maximize2, Mic, MicOff, Monitor, MonitorOff, PhoneOff, Pin, PinOff, Signal, Video, VideoOff, Volume2, VolumeX, Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
+import { Headphones, HeadphoneOff, Maximize2, Mic, MicOff, Music, Monitor, MonitorOff, PhoneOff, Pin, PinOff, Signal, Video, VideoOff, Volume2, VolumeX, Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Track } from 'livekit-client'
+import { MusicPanel } from '@/components/music/MusicPanel'
 import { useVoice, type VoiceParticipant } from '@/store/voice'
 import { useSettings } from '@/store/settings'
 import { useUI } from '@/store/ui'
@@ -11,6 +12,8 @@ import { useVoiceOccupants } from '@/data/presence'
 import { Avatar } from '@/components/ui'
 import { codeLabel } from '@/lib/keys'
 import { UserSettingsModal } from '@/components/settings/UserSettings'
+import { requestScreenShare } from './ScreenShareModal'
+import { useLocalNick, useUserMenu } from '@/components/userMenu'
 import type { Member } from '@/lib/types'
 
 interface TileSpec {
@@ -20,7 +23,10 @@ interface TileSpec {
   p: VoiceParticipant
 }
 
-function VideoTile({ spec, big, member, onFocus, focused }: { spec: TileSpec; big?: boolean; member?: Member; onFocus: () => void; focused: boolean }) {
+function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: TileSpec; big?: boolean; member?: Member; onFocus: () => void; focused: boolean; serverId: string }) {
+  const openProfile = useUI((s) => s.openProfile)
+  const userMenu = useUserMenu(serverId)
+  const localNick = useLocalNick()
   const room = useVoice((s) => s.room)
   const version = useVoice((s) => s.version)
   const volume = useVoice((s) => s.volumes[spec.identity] ?? 1)
@@ -44,30 +50,29 @@ function VideoTile({ spec, big, member, onFocus, focused }: { spec: TileSpec; bi
     }
   }, [track, version])
 
-  const name = member?.nickname || member?.profile?.display_name || p.name
+  const name = localNick(p.identity, member?.nickname || member?.profile?.display_name || p.name)
   const label = kind === 'screen' ? `Tela de ${name}` : name
   const mirror = p.isLocal && kind === 'camera'
 
   return (
     <div
       ref={wrapRef}
-      className={clsx('group relative overflow-hidden rounded-xl bg-[var(--bg-tertiary)]', big ? 'h-full w-full' : 'aspect-video w-full', p.speaking && kind === 'camera' && 'ring-[3px] ring-[var(--success)]')}
+      className={clsx('group relative overflow-hidden rounded-lg bg-[var(--bg-secondary)]', big ? 'h-full w-full' : 'aspect-video w-full', p.speaking && kind === 'camera' && 'outline-2 -outline-offset-2 outline-[var(--success)]')}
       onDoubleClick={() => void wrapRef.current?.requestFullscreen?.()}
+      onContextMenu={(e) => userMenu(p.identity, e)}
     >
       {hasVideo ? (
         <video ref={videoRef} autoPlay playsInline muted className={clsx('h-full w-full', kind === 'screen' ? 'object-contain bg-black' : 'object-cover', mirror && '-scale-x-100')} aria-label={label} />
       ) : (
         <div className="grid h-full w-full place-items-center">
-          <div className={clsx('rounded-full transition-shadow', p.speaking && 'shadow-[0_0_0_4px_var(--success)]')}>
-            <Avatar path={member?.profile?.avatar_path} name={name} id={p.identity} size={big ? 120 : 72} />
-          </div>
+          <Avatar path={member?.profile?.avatar_path} name={name} id={p.identity} size={big ? 120 : 80} speaking={p.speaking} />
           {kind === 'screen' && <span className="absolute bottom-10 text-fg-muted">Carregando transmissão…</span>}
         </div>
       )}
       <div className="absolute bottom-0 left-0 flex max-w-full items-center gap-1.5 rounded-tr-lg bg-black/60 px-2 py-1 text-xs text-white">
         {kind === 'screen' && <Monitor size={12} />}
         {!p.micOn && kind === 'camera' && <MicOff size={12} className="text-[var(--danger)]" aria-label="Microfone desligado" />}
-        <span className="truncate font-semibold">{label}{p.isLocal ? ' (você)' : ''}</span>
+        <button className="truncate border-0 bg-transparent p-0 font-semibold text-inherit hover:underline" onClick={(e) => { e.stopPropagation(); openProfile(p.identity, serverId, e.clientX, e.clientY - 360) }}>{label}{p.isLocal ? ' (você)' : ''}</button>
         {p.quality !== 'unknown' && p.quality !== 'excellent' && <Signal size={12} className={p.quality === 'good' ? 'text-warning' : 'text-danger'} aria-label={`Conexão ${p.quality}`} />}
       </div>
       <div className="absolute top-2 right-2 flex gap-1 rounded-lg bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
@@ -84,8 +89,8 @@ function VideoTile({ spec, big, member, onFocus, focused }: { spec: TileSpec; bi
   )
 }
 
-export function ControlBar({ compact }: { compact?: boolean }) {
-  const { micMuted, deafened, camOn, screenOn, toggleMic, toggleDeafen, toggleCamera, toggleScreen, leave, pttActive } = useVoice()
+export function ControlBar({ compact, music }: { compact?: boolean; music?: { enabled: boolean; open: boolean; toggle: () => void } }) {
+  const { micMuted, deafened, camOn, screenOn, toggleMic, toggleDeafen, toggleCamera, leave, pttActive } = useVoice()
   const ptt = useSettings((s) => s.settings.voice.pttEnabled)
   const open = useUI((s) => s.openModal)
   const canShare = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia
@@ -101,9 +106,12 @@ export function ControlBar({ compact }: { compact?: boolean }) {
       <button className={clsx('icon-btn', compact ? '' : 'h-12 w-12 rounded-full', camOn && 'active bg-[var(--bg-selected)]')} onClick={() => void toggleCamera()} aria-pressed={camOn} aria-label={camOn ? 'Desligar câmera' : 'Ligar câmera'} data-tip={camOn ? 'Desligar câmera' : 'Ligar câmera'}>
         {camOn ? <Video size={size} /> : <VideoOff size={size} />}
       </button>
-      <button className={clsx('icon-btn', compact ? '' : 'h-12 w-12 rounded-full', screenOn && 'active bg-[var(--bg-selected)] text-success')} onClick={() => void toggleScreen()} disabled={!canShare} aria-pressed={screenOn} aria-label={screenOn ? 'Parar compartilhamento' : 'Compartilhar tela'} data-tip={!canShare ? 'Seu navegador não suporta compartilhamento de tela' : screenOn ? 'Parar compartilhamento' : 'Compartilhar tela'}>
+      <button className={clsx('icon-btn', compact ? '' : 'h-12 w-12 rounded-full', screenOn && 'active bg-[var(--bg-selected)] text-success')} onClick={requestScreenShare} disabled={!canShare} aria-pressed={screenOn} aria-label={screenOn ? 'Parar compartilhamento' : 'Compartilhar tela'} data-tip={!canShare ? 'Seu navegador não suporta compartilhamento de tela' : screenOn ? 'Parar compartilhamento' : 'Compartilhar tela'}>
         {screenOn ? <MonitorOff size={size} /> : <Monitor size={size} />}
       </button>
+      {!compact && music && (
+        <button className={clsx('icon-btn h-12 w-12 rounded-full', music.open && 'active bg-[var(--bg-selected)]')} onClick={music.toggle} disabled={!music.enabled} aria-pressed={music.open} aria-label="Música (Vibe Beats)" data-tip={music.enabled ? 'Música (Vibe Beats)' : 'O bot Vibe Beats está desligado. Quem administra liga em Configurações do servidor → Música.'}><Music size={size} /></button>
+      )}
       {!compact && <button className="icon-btn h-12 w-12 rounded-full" onClick={() => open(<UserSettingsModal initialTab="voice" />)} aria-label="Configurações de voz" data-tip="Configurações de voz"><SettingsIcon size={size} /></button>}
       <button className={clsx('icon-btn', compact ? '' : 'h-12 w-14 rounded-full', 'bg-[var(--danger)] text-white hover:!bg-[var(--danger-hover)] hover:!text-white')} onClick={() => void leave()} aria-label="Sair da chamada" data-tip="Sair da chamada"><PhoneOff size={size} /></button>
     </div>
@@ -124,6 +132,8 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
   const occupants = useVoiceOccupants()[channel.id] ?? []
   const joined = channelId === channel.id
   const settings = useSettings((s) => s.settings)
+  const [showMusic, setShowMusic] = useState(false)
+  const botOn = !!members?.some((m) => m.profile?.is_bot)
   const memberOf = (id: string) => members?.find((m) => m.user_id === id)
 
   const tiles = useMemo<TileSpec[]>(() => {
@@ -170,7 +180,8 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
     status === 'failed' ? { text: error ?? 'Falha na conexão.', tone: 'err' } : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#101114]">
+    <div className="stage-dark flex h-full min-h-0">
+    <div className="flex min-w-0 flex-1 flex-col">
       {statusBanner && (
         <div className={clsx('flex items-center justify-center gap-3 px-4 py-2 text-sm', statusBanner.tone === 'err' ? 'bg-[var(--danger)] text-white' : statusBanner.tone === 'warn' ? 'bg-warning text-black' : 'bg-[var(--accent)] text-white')} role="status">
           {status !== 'failed' && <Loader2 size={14} className="spin" />}{statusBanner.text}
@@ -182,26 +193,28 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
           <div className="grid h-full place-items-center text-fg-muted"><Loader2 className="spin" /></div>
         ) : spotlight ? (
           <div className="flex h-full flex-col gap-3 lg:flex-row">
-            <div className="min-h-[200px] min-w-0 flex-1"><VideoTile spec={spotlight} big member={memberOf(spotlight.identity)} focused={focus === spotlight.key} onFocus={() => setFocus(focus === spotlight.key ? null : spotlight.key)} /></div>
+            <div className="min-h-[200px] min-w-0 flex-1"><VideoTile serverId={serverId} spec={spotlight} big member={memberOf(spotlight.identity)} focused={focus === spotlight.key} onFocus={() => setFocus(focus === spotlight.key ? null : spotlight.key)} /></div>
             {others.length > 0 && (
               <div className="flex shrink-0 gap-2 overflow-x-auto lg:w-56 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden">
-                {others.map((t) => <div key={t.key} className="w-44 shrink-0 lg:w-full"><VideoTile spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} /></div>)}
+                {others.map((t) => <div key={t.key} className="w-44 shrink-0 lg:w-full"><VideoTile serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} /></div>)}
               </div>
             )}
           </div>
         ) : (
           <div className={clsx('grid h-full auto-rows-fr content-center gap-3', gridCols(tiles.length))}>
-            {tiles.map((t) => <VideoTile key={t.key} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} />)}
+            {tiles.map((t) => <VideoTile key={t.key} serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} />)}
           </div>
         )}
       </div>
-      <div className="flex flex-col items-center gap-2 border-t border-white/10 bg-[#17181c] px-3 py-3">
-        <ControlBar />
+      <div className="flex flex-col items-center gap-2 border-t border-[var(--border)] bg-[var(--bg-rail)] px-3 py-3">
+        <ControlBar music={{ enabled: botOn, open: showMusic, toggle: () => setShowMusic((o) => !o) }} />
         <div className="text-[11px] text-fg-muted">
           {meId && participants.some((p) => p.isLocal && p.screenOn) && <span className="mr-3 text-success">● Você está transmitindo a tela</span>}
           {settings.voice.pttEnabled && <span>Push-to-talk: segure <kbd className="rounded bg-tertiary px-1">{codeLabel(settings.keybinds.pushToTalk)}</kbd></span>}
         </div>
       </div>
+    </div>
+    {showMusic && botOn && <div className="max-md:absolute max-md:inset-0 max-md:z-10"><MusicPanel channelId={channel.id} serverId={serverId} onClose={() => setShowMusic(false)} /></div>}
     </div>
   )
 }

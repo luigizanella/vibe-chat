@@ -24,7 +24,8 @@
     id, username, display_name, avatar_path: null, banner_path: null, banner_color: null, bio: '', custom_status: '',
     status_pref: 'online', onboarded: true, disabled_at: null, created_at: ago(60 * 24 * 30), ...extra,
   })
-  const P = { [ME]: prof(ME, 'luigi', 'Luigi'), [ANA]: prof(ANA, 'ana', 'Ana Souza', { custom_status: 'Jogando 🎮' }), [BRU]: prof(BRU, 'bruno', 'Bruno') }
+  const BOT = '44444444-4444-4444-8444-444444444444'
+  const P = { [BOT]: prof(BOT, 'vibebeats', 'Vibe Beats', { is_bot: true, custom_status: '/tocar | /ajuda' }), [ME]: prof(ME, 'luigi', 'Luigi'), [ANA]: prof(ANA, 'ana', 'Ana Souza', { custom_status: 'Jogando 🎮' }), [BRU]: prof(BRU, 'bruno', 'Bruno') }
   const mini = (id) => ({ id, username: P[id].username, display_name: P[id].display_name, avatar_path: null })
   const msg = (n, author, content, mins, extra = {}) => ({
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, channel_id: GERAL, dm_id: null, author_id: author, content,
@@ -40,13 +41,15 @@
     msg(6, BRU, `Fechado, <@${ME}> 🔥`, 5, { mention_user_ids: [ME], edited_at: ago(4) }),
   ]
   const roles = [
-    { id: R_DEF, server_id: SRV, name: 'Membro', color: '#99aab5', position: 0, permissions: ['send_messages', 'attach_files', 'add_reactions', 'create_invite', 'connect_voice', 'speak', 'video', 'screen_share'], is_default: true },
-    { id: R_MOD, server_id: SRV, name: 'Moderador', color: '#3ba55d', position: 50, permissions: ['kick_members', 'ban_members', 'manage_messages'], is_default: false },
+    { id: R_DEF, server_id: SRV, name: 'Membro', color: '#99aab5', position: 0, permissions: ['send_messages', 'attach_files', 'add_reactions', 'create_invite', 'connect_voice', 'speak', 'video', 'screen_share'], is_default: true, hoist: false },
+    { id: R_MOD, server_id: SRV, name: 'Moderador', color: '#3ba55d', position: 50, permissions: ['kick_members', 'ban_members', 'manage_messages'], is_default: false, hoist: true },
+    { id: 'd2d2d2d2-d2d2-4d2d-8d2d-d2d2d2d2d2d2', server_id: SRV, name: 'Vibe Founder', color: '#e91e63', position: 80, permissions: ['manage_roles'], is_default: false, hoist: true },
   ]
   const members = [
-    { server_id: SRV, user_id: ME, nickname: null, joined_at: ago(9999), profile: P[ME], member_roles: [] },
+    { server_id: SRV, user_id: ME, nickname: null, joined_at: ago(9999), profile: P[ME], member_roles: [{ role_id: 'd2d2d2d2-d2d2-4d2d-8d2d-d2d2d2d2d2d2' }] },
     { server_id: SRV, user_id: ANA, nickname: null, joined_at: ago(9000), profile: P[ANA], member_roles: [{ role_id: R_MOD }] },
-    { server_id: SRV, user_id: BRU, nickname: null, joined_at: ago(8000), profile: P[BRU], member_roles: [] },
+    { server_id: SRV, user_id: BRU, nickname: null, joined_at: ago(8000), timeout_until: new Date(now + 600000).toISOString(), voice_muted: true, voice_deafened: false, profile: P[BRU], member_roles: [] },
+    { server_id: SRV, user_id: BOT, nickname: null, joined_at: ago(7000), profile: P[BOT], member_roles: [{ role_id: 'd2d2d2d2-d2d2-4d2d-8d2d-d2d2d2d2d2d2' }] },
   ]
   const T = {
     profiles: Object.values(P),
@@ -58,7 +61,7 @@
       { id: OFF, server_id: SRV, category_id: CAT1, name: 'off-topic', kind: 'text', topic: '', position: 1, is_private: false },
       { id: VOZ, server_id: SRV, category_id: CAT2, name: 'Voz geral', kind: 'voice', topic: '', position: 0, is_private: false },
     ],
-    messages,
+    messages, music_sessions: [], music_queue: [],
     friendships: [{ requester_id: ME, addressee_id: ANA, status: 'accepted', created_at: ago(5000) }, { requester_id: BRU, addressee_id: ME, status: 'pending', created_at: ago(100) }],
     blocks: [], notification_prefs: [],
     dm_conversations: [{ id: DM, is_group: false, name: null, pair_key: 'x', created_at: ago(500), last_message_at: ago(10),

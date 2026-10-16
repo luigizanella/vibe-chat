@@ -148,6 +148,12 @@ export function useRealtimeSync() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (p) => void onMessageEvent(qc, p))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions' }, (p) => void onReactionEvent(qc, p))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attachments' }, () => undefined)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'music_sessions' }, () => {
+        void qc.invalidateQueries({ queryKey: ['music'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'music_queue' }, () => {
+        void qc.invalidateQueries({ queryKey: ['music'] })
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, (p) => {
         void qc.invalidateQueries({ queryKey: qk.servers })
         if (p.eventType === 'DELETE') {

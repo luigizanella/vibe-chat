@@ -1,3 +1,4 @@
+@import '@fontsource-variable/inter';
 @import 'tailwindcss';
 
 /* ==========================================================================
@@ -8,11 +9,11 @@
 
 :root {
   /* destaque (configurável) */
-  --accent-h: 250;
+  --accent-h: 247;
   --accent-s: 100%;
-  --accent-l: 69%;
+  --accent-l: 68%;
   --accent: hsl(var(--accent-h) var(--accent-s) var(--accent-l));
-  --accent-hover: hsl(var(--accent-h) var(--accent-s) calc(var(--accent-l) - 7%));
+  --accent-hover: hsl(var(--accent-h) var(--accent-s) calc(var(--accent-l) - 6%));
   --accent-active: hsl(var(--accent-h) var(--accent-s) calc(var(--accent-l) - 12%));
   --accent-soft: hsl(var(--accent-h) var(--accent-s) var(--accent-l) / 0.16);
   --accent-contrast: #ffffff;
@@ -20,8 +21,8 @@
   /* semânticas */
   --success: #3ba55d;
   --warning: #f0b232;
-  --danger: #ed4245;
-  --danger-hover: #c93b3e;
+  --danger: #d83a3d;
+  --danger-hover: #b42f32;
   --info: #4aa3ff;
 
   /* presença */
@@ -31,7 +32,7 @@
   --presence-offline: #80848e;
 
   /* tipografia */
-  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
@@ -67,50 +68,73 @@
   --z-tooltip: 100;
 }
 
-/* Tema escuro (padrão) */
+/* Tema escuro (padrão). Valores escolhidos para contraste AA (testado em tests/unit/contrast.test.ts). */
 :root,
 [data-theme='dark'] {
   color-scheme: dark;
-  --bg-rail: #17181c;
-  --bg-tertiary: #1a1b1f;
-  --bg-secondary: #202125;
-  --bg-primary: #2a2b31;
-  --bg-elevated: #323339;
-  --bg-input: #1c1d21;
-  --bg-hover: rgb(255 255 255 / 0.06);
-  --bg-selected: rgb(255 255 255 / 0.11);
+  --bg-rail: #1e1f22;
+  --bg-tertiary: #232428;
+  --bg-secondary: #2b2d31;
+  --bg-primary: #313338;
+  --bg-elevated: #383a40;
+  --bg-input: #1e1f22;
+  --bg-hover: rgb(255 255 255 / 0.07);
+  --bg-selected: rgb(255 255 255 / 0.12);
   --bg-mention: hsl(var(--accent-h) var(--accent-s) var(--accent-l) / 0.12);
-  --border: rgb(255 255 255 / 0.08);
-  --border-strong: rgb(255 255 255 / 0.16);
+  --border: rgb(255 255 255 / 0.09);
+  --border-strong: rgb(255 255 255 / 0.18);
   --text-primary: #f2f3f5;
-  --text-secondary: #b5bac1;
-  --text-muted: #80848e;
-  --text-link: #7fb8ff;
+  --text-secondary: #c4c9ce;
+  --text-muted: #a3a6aa;
+  --text-link: #8fc1ff;
   --shadow: 0 8px 24px rgb(0 0 0 / 0.45);
   --scrim: rgb(0 0 0 / 0.7);
+  --success-text: #57d28f;
+  --danger-text: #ff8587;
+  --warning-text: #f0b232;
 }
 
 [data-theme='light'] {
   color-scheme: light;
   --bg-rail: #e3e5e8;
-  --bg-tertiary: #e9ebee;
+  --bg-tertiary: #e3e5e8;
   --bg-secondary: #f2f3f5;
   --bg-primary: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-input: #e8eaed;
-  --bg-hover: rgb(0 0 0 / 0.05);
-  --bg-selected: rgb(0 0 0 / 0.09);
+  --bg-input: #e3e5e8;
+  --bg-hover: rgb(6 6 7 / 0.06);
+  --bg-selected: rgb(6 6 7 / 0.1);
   --bg-mention: hsl(var(--accent-h) var(--accent-s) var(--accent-l) / 0.1);
-  --border: rgb(0 0 0 / 0.1);
-  --border-strong: rgb(0 0 0 / 0.2);
-  --text-primary: #1e1f22;
-  --text-secondary: #4e5058;
-  --text-muted: #747884;
-  --text-link: #0a5bd4;
+  --border: rgb(6 6 7 / 0.12);
+  --border-strong: rgb(6 6 7 / 0.24);
+  --text-primary: #060607;
+  --text-secondary: #404249;
+  --text-muted: #5c5f66;
+  --text-link: #0a52c2;
   --shadow: 0 8px 24px rgb(0 0 0 / 0.18);
   --scrim: rgb(0 0 0 / 0.5);
+  --success-text: #1a7f45;
+  --danger-text: #c62828;
+  --warning-text: #8a5700;
 }
 
+/* Área de chamada: sempre escura (como no Discord), em qualquer tema. Redefine os tokens localmente. */
+.stage-dark {
+  color-scheme: dark;
+  --bg-rail: #1e1f22;
+  --bg-tertiary: #232428;
+  --bg-secondary: #2b2d31;
+  --bg-primary: #1a1b1e;
+  --bg-elevated: #383a40;
+  --bg-hover: rgb(255 255 255 / 0.08);
+  --bg-selected: rgb(255 255 255 / 0.14);
+  --text-primary: #f2f3f5;
+  --text-secondary: #c4c9ce;
+  --text-muted: #a3a6aa;
+  --border: rgb(255 255 255 / 0.1);
+  background: #000;
+  color: var(--text-primary);
+}
 @theme inline {
   --color-rail: var(--bg-rail);
   --color-tertiary: var(--bg-tertiary);
@@ -119,9 +143,9 @@
   --color-elevated: var(--bg-elevated);
   --color-input: var(--bg-input);
   --color-accent: var(--accent);
-  --color-danger: var(--danger);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
+  --color-danger: var(--danger-text);
+  --color-success: var(--success-text);
+  --color-warning: var(--warning-text);
   --color-border: var(--border);
   --color-fg: var(--text-primary);
   --color-fg-2: var(--text-secondary);
@@ -143,7 +167,7 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: var(--text-sm);
+  font-size: var(--text-md);
   line-height: var(--leading);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -328,7 +352,7 @@ button:disabled {
 }
 .error-text {
   font-size: var(--text-xs);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .card {
   background: var(--bg-secondary);
@@ -446,7 +470,7 @@ dialog.modal::backdrop {
   outline: none;
 }
 .menu-item.danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .menu-item.danger:hover:not(:disabled),
 .menu-item.danger:focus-visible {

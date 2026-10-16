@@ -16,6 +16,9 @@ import { supabase } from '@/lib/supabase'
 import { useSettings } from './settings'
 import { toast } from './ui'
 import { playSound } from '@/lib/sounds'
+import { GateCore, levelFromDb } from '@/lib/gate'
+import { screenPreset } from '@/lib/screen'
+import { reportMediaError, type MediaKind } from '@/lib/mediaErrors'
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
 
@@ -52,6 +55,16 @@ interface VoiceState {
   pttActive: boolean
   volumes: Record<string, number>
   focus: string | null
+  /** Latência (RTT) até o servidor de mídia, em ms; null enquanto não medida. */
+  ping: number | null
+  /** Medidor do microfone enviado (0–100), se o gate está aberto e o limite atual. */
+  micLevel: number
+  micOpen: boolean
+  micThreshold: number
+  /** Silenciado/ensurdecido por um moderador do servidor (não dá para desfazer sozinho). */
+  serverMuted: boolean
+  serverDeafened: boolean
+  setServerFlags: (muted: boolean, deafened: boolean) => void
   join: (t: VoiceTarget) => Promise<void>
   leave: () => Promise<void>
   retry: () => Promise<void>
@@ -75,53 +88,50 @@ function loadVolumes(): Record<string, number> {
   }
 }
 
-/** Mapeia nível RMS (dBFS) para 0–100, igual ao medidor das configurações. */
-export function levelFromDb(db: number): number {
-  return Math.max(0, Math.min(100, ((db + 70) / 70) * 100))
-}
+export { levelFromDb } from '@/lib/gate'
 
 /**
- * Processador de áudio local: porta de ruído (sensibilidade do microfone) via WebAudio.
- * Fica entre a captura e o envio; o mute/PTT continuam sendo aplicados na própria track.
+ * Processador de áudio local: filtro passa-alta + porta de ruído (noise gate) via WebAudio.
+ * Fica entre a captura e o envio; mute/PTT continuam sendo aplicados na própria track.
+ * A decisão de abrir/fechar vem do GateCore (lógica pura e testada).
  */
 class MicGateProcessor implements TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> {
   name = 'vibe-mic-gate'
   processedTrack?: MediaStreamTrack
-  private ctx?: AudioContext
-  private source?: MediaStreamAudioSourceNode
-  private analyser?: AnalyserNode
-  private gain?: GainNode
-  private dest?: MediaStreamAudioDestinationNode
+  readonly core = new GateCore({ auto: true, sensitivity: 35 })
+  /** Recebe (nível 0–100, aberto, limite 0–100) ~10x por segundo. */
+  onMeter?: (level: number, open: boolean, threshold: number) => void
+  private nodes: AudioNode[] = []
   private timer?: ReturnType<typeof setInterval>
-  private holdUntil = 0
-  threshold = 20
-  enabled = false
+  private ticks = 0
 
   async init(opts: AudioProcessorOptions) {
-    this.ctx = opts.audioContext
-    this.source = this.ctx.createMediaStreamSource(new MediaStream([opts.track]))
-    this.analyser = this.ctx.createAnalyser()
-    this.analyser.fftSize = 1024
-    this.gain = this.ctx.createGain()
-    this.dest = this.ctx.createMediaStreamDestination()
-    this.source.connect(this.analyser)
-    this.source.connect(this.gain)
-    this.gain.connect(this.dest)
-    this.processedTrack = this.dest.stream.getAudioTracks()[0]
-    const buf = new Float32Array(this.analyser.fftSize)
+    const ctx = opts.audioContext
+    const source = ctx.createMediaStreamSource(new MediaStream([opts.track]))
+    const highpass = ctx.createBiquadFilter() // remove zumbido/vibração abaixo de ~90 Hz
+    highpass.type = 'highpass'
+    highpass.frequency.value = 90
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 1024
+    const gain = ctx.createGain()
+    const dest = ctx.createMediaStreamDestination()
+    source.connect(highpass)
+    highpass.connect(analyser)
+    highpass.connect(gain)
+    gain.connect(dest)
+    this.nodes = [source, highpass, analyser, gain]
+    this.processedTrack = dest.stream.getAudioTracks()[0]
+    this.core.reset()
+    const buf = new Float32Array(analyser.fftSize)
     this.timer = setInterval(() => {
-      if (!this.analyser || !this.gain || !this.ctx) return
-      if (!this.enabled) {
-        this.gain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.01)
-        return
-      }
-      this.analyser.getFloatTimeDomainData(buf)
+      analyser.getFloatTimeDomainData(buf)
       let sum = 0
       for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
       const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-9)
       const now = performance.now()
-      if (levelFromDb(db) >= this.threshold) this.holdUntil = now + 300
-      this.gain.gain.setTargetAtTime(now < this.holdUntil ? 1 : 0, this.ctx.currentTime, now < this.holdUntil ? 0.005 : 0.04)
+      const open = this.core.update(db, now)
+      gain.gain.setTargetAtTime(open ? 1 : 0, ctx.currentTime, open ? 0.005 : 0.05)
+      if (++this.ticks % 5 === 0) this.onMeter?.(levelFromDb(db), open, levelFromDb(this.core.thresholdDb))
     }, 20)
   }
   async restart(opts: AudioProcessorOptions) {
@@ -130,12 +140,31 @@ class MicGateProcessor implements TrackProcessor<Track.Kind.Audio, AudioProcesso
   }
   async destroy() {
     clearInterval(this.timer)
-    this.source?.disconnect()
-    this.gain?.disconnect()
-    this.analyser?.disconnect()
+    this.nodes.forEach((n) => n.disconnect())
+    this.nodes = []
     this.processedTrack = undefined
   }
 }
+/** Mede o RTT do par ICE ativo (WebRTC getStats). Retorna null se indisponível. */
+async function measureRtt(room: Room): Promise<number | null> {
+  try {
+    const pcm = (room.engine as unknown as { pcManager?: { publisher?: { getStats?: () => Promise<RTCStatsReport> }; subscriber?: { getStats?: () => Promise<RTCStatsReport> } } }).pcManager
+    for (const t of [pcm?.subscriber, pcm?.publisher]) {
+      const report = await t?.getStats?.()
+      if (!report) continue
+      let rtt: number | null = null
+      report.forEach((r: { type?: string; state?: string; nominated?: boolean; currentRoundTripTime?: number }) => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated && typeof r.currentRoundTripTime === 'number') rtt = Math.round(r.currentRoundTripTime * 1000)
+      })
+      if (rtt !== null) return rtt
+    }
+  } catch {
+    /* indisponível */
+  }
+  return null
+}
+
+let pingTimer: ReturnType<typeof setInterval> | undefined
 
 let gate: MicGateProcessor | null = null
 let audioContainer: HTMLDivElement | null = null
@@ -203,11 +232,6 @@ function videoRes(q: '360p' | '720p' | '1080p') {
   return q === '360p' ? VideoPresets.h360.resolution : q === '720p' ? VideoPresets.h720.resolution : VideoPresets.h1080.resolution
 }
 
-function screenRes(q: '720p' | '1080p' | '1440p', fps: number) {
-  const dims = q === '720p' ? [1280, 720] : q === '1080p' ? [1920, 1080] : [2560, 1440]
-  return { width: dims[0], height: dims[1], frameRate: fps }
-}
-
 export const useVoice = create<VoiceState>((set, get) => {
   const sync = (bumpVersion = true) => {
     const room = get().room
@@ -221,10 +245,10 @@ export const useVoice = create<VoiceState>((set, get) => {
   }
 
   const applyVolumes = () => {
-    const { room, volumes, deafened } = get()
+    const { room, volumes, deafened, serverDeafened } = get()
     if (!room) return
     for (const p of room.remoteParticipants.values()) {
-      const v = deafened ? 0 : (volumes[p.identity] ?? 1)
+      const v = deafened || serverDeafened ? 0 : (volumes[p.identity] ?? 1)
       p.setVolume(v, Track.Source.Microphone)
       p.setVolume(v, Track.Source.ScreenShareAudio)
     }
@@ -232,10 +256,10 @@ export const useVoice = create<VoiceState>((set, get) => {
 
   /** Decide se o microfone transmite agora (mute, ensurdecido, push-to-talk). */
   const applyMic = async () => {
-    const { room, micMuted, deafened, pttActive } = get()
+    const { room, micMuted, deafened, pttActive, serverMuted } = get()
     if (!room || room.state !== ConnectionState.Connected) return
     const ptt = useSettings.getState().settings.voice.pttEnabled
-    const want = !micMuted && !deafened && (!ptt || pttActive)
+    const want = !micMuted && !deafened && !serverMuted && (!ptt || pttActive)
     const lp = room.localParticipant
     const pub = lp.getTrackPublication(Track.Source.Microphone)
     try {
@@ -259,8 +283,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (!(track instanceof LocalAudioTrack)) return
     const v = useSettings.getState().settings.voice
     gate ??= new MicGateProcessor()
-    gate.enabled = !v.autoSensitivity
-    gate.threshold = v.sensitivity
+    gate.core.opts = { auto: v.autoSensitivity, sensitivity: v.sensitivity }
+    gate.onMeter = (micLevel, micOpen, micThreshold) => set({ micLevel, micOpen, micThreshold })
     if (track.getProcessor?.() !== gate) {
       try {
         await track.setProcessor(gate)
@@ -271,15 +295,44 @@ export const useVoice = create<VoiceState>((set, get) => {
   }
 
   const handleMediaError = (e: unknown, what: string) => {
-    const name = (e as { name?: string })?.name ?? ''
-    if (name === 'NotAllowedError' || name === 'PermissionDeniedError')
-      toast.error(`Permissão negada para ${what}. Libere o acesso nas configurações do navegador/sistema e tente novamente.`)
-    else if (name === 'NotFoundError' || name === 'OverconstrainedError')
-      toast.error(`Dispositivo de ${what} não encontrado. Verifique se está conectado.`)
-    else if (name === 'NotReadableError') toast.error(`O ${what} está em uso por outro aplicativo ou indisponível.`)
-    else toast.error(`Falha ao acessar ${what}.`)
+    const kind: MediaKind = what === 'câmera' ? 'camera' : what === 'tela' ? 'screen' : what.startsWith('saída') ? 'speaker' : 'microphone'
+    const problem = reportMediaError(e, kind)
+    // dispositivo salvo não existe mais: volta ao padrão do sistema para a próxima tentativa
+    if (problem === 'overconstrained' || problem === 'notfound') {
+      const { updateVoice } = useSettings.getState()
+      if (kind === 'microphone') updateVoice({ inputId: 'default' })
+      else if (kind === 'camera') updateVoice({ cameraId: '' })
+      else if (kind === 'speaker') updateVoice({ outputId: 'default' })
+    }
   }
 
+  /** Se o dispositivo escolhido foi desconectado durante a chamada, avisa e volta ao padrão. */
+  const checkDevices = async (room: Room) => {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices()
+      const has = (kind: MediaDeviceKind, id: string) => !id || id === 'default' || list.some((d) => d.kind === kind && d.deviceId === id)
+      const v = useSettings.getState().settings.voice
+      const { updateVoice } = useSettings.getState()
+      if (!has('audioinput', v.inputId)) {
+        toast.info('O microfone escolhido foi desconectado. Usando o padrão do sistema.')
+        updateVoice({ inputId: 'default' })
+        await room.switchActiveDevice('audioinput', 'default').catch(() => undefined)
+      }
+      if (!has('audiooutput', v.outputId)) {
+        toast.info('A saída de áudio escolhida foi desconectada. Usando o padrão do sistema.')
+        updateVoice({ outputId: 'default' })
+        await room.switchActiveDevice('audiooutput', 'default').catch(() => undefined)
+      }
+      if (v.cameraId && !has('videoinput', v.cameraId)) {
+        toast.info('A câmera escolhida foi desconectada.')
+        updateVoice({ cameraId: '' })
+        if (room.localParticipant.isCameraEnabled) await room.localParticipant.setCameraEnabled(false).catch(() => undefined)
+      }
+    } catch {
+      /* sem permissão de listagem */
+    }
+    sync()
+  }
   const wire = (room: Room) => {
     const touch = () => sync()
     room
@@ -320,13 +373,14 @@ export const useVoice = create<VoiceState>((set, get) => {
         set({ status: 'connected', error: null })
         sync()
       })
-      .on(RoomEvent.MediaDevicesChanged, touch)
+      .on(RoomEvent.MediaDevicesChanged, () => void checkDevices(room))
       .on(RoomEvent.AudioPlaybackStatusChanged, () => {
         if (!room.canPlaybackAudio) void room.startAudio().catch(() => undefined)
       })
       .on(RoomEvent.Disconnected, (reason) => {
         if (get().room !== room) return
         track_cleanup()
+        stopPing()
         if (userLeft || reason === DisconnectReason.CLIENT_INITIATED) return
         if (reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED) {
           set({ status: 'failed', error: 'Você foi removido da chamada.', room: null, channelId: null, participants: [] })
@@ -339,6 +393,21 @@ export const useVoice = create<VoiceState>((set, get) => {
 
   const track_cleanup = () => {
     audioContainer?.replaceChildren()
+  }
+
+  const startPing = () => {
+    clearInterval(pingTimer)
+    const tick = async () => {
+      const room = get().room
+      if (!room || room.state !== ConnectionState.Connected) return
+      set({ ping: await measureRtt(room) })
+    }
+    void tick()
+    pingTimer = setInterval(() => void tick(), 3000)
+  }
+  const stopPing = () => {
+    clearInterval(pingTimer)
+    set({ ping: null })
   }
 
   const scheduleRetry = () => {
@@ -375,7 +444,6 @@ export const useVoice = create<VoiceState>((set, get) => {
         red: true,
         simulcast: true,
         videoCodec: 'vp8',
-        screenShareEncoding: { maxBitrate: 3_500_000, maxFramerate: s.screenFps },
       },
     })
     wire(room)
@@ -399,6 +467,25 @@ export const useVoice = create<VoiceState>((set, get) => {
     pttActive: false,
     volumes: loadVolumes(),
     focus: null,
+    ping: null,
+    micLevel: 0,
+    micOpen: false,
+    micThreshold: 0,
+    serverMuted: false,
+    serverDeafened: false,
+    setServerFlags: (serverMuted, serverDeafened) => {
+      const prev = get()
+      if (prev.serverMuted === serverMuted && prev.serverDeafened === serverDeafened) return
+      set({ serverMuted, serverDeafened })
+      if (prev.room) {
+        if (serverMuted && !prev.serverMuted) toast.info('Um moderador silenciou o seu microfone neste servidor.')
+        if (!serverMuted && prev.serverMuted) toast.info('Seu microfone foi liberado.')
+        if (serverDeafened && !prev.serverDeafened) toast.info('Um moderador desativou o seu áudio neste servidor.')
+        if (!serverDeafened && prev.serverDeafened) toast.info('Seu áudio foi liberado.')
+      }
+      applyVolumes()
+      void applyMic()
+    },
 
     join: async (target) => {
       if (get().channelId === target.id && get().status !== 'failed') return
@@ -410,6 +497,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       try {
         const room = await connectRoom(target)
         set({ status: 'connected' })
+        startPing()
         playSound('join')
         try {
           await room.startAudio()
@@ -430,6 +518,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     leave: async () => {
       userLeft = true
       clearTimeout(retryTimer)
+      stopPing()
+      set({ micLevel: 0, micOpen: false })
       const room = get().room
       set({ room: null, channelId: null, target: null, status: 'idle', error: null, participants: [], camOn: false, screenOn: false, focus: null, pttActive: false })
       if (room) {
@@ -460,6 +550,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         const room = await connectRoom(target)
         retries = 0
         set({ status: 'connected', error: null })
+        startPing()
         await room.startAudio().catch(() => undefined)
         sync()
         await applyMic()
@@ -473,6 +564,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     },
 
     toggleMic: async () => {
+      if (get().serverMuted) return void toast.error('Você foi silenciado por um moderador e não pode ativar o microfone agora.')
       const { micMuted, deafened } = get()
       if (deafened) {
         // sair do modo ensurdecido ao ativar o microfone (comportamento esperado)
@@ -503,6 +595,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     toggleCamera: async () => {
       const room = get().room
       if (!room) return
+      if (get().serverMuted && !room.localParticipant.isCameraEnabled) return void toast.error('Você foi silenciado por um moderador e não pode ligar a câmera agora.')
       const s = useSettings.getState().settings.voice
       try {
         await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, {
@@ -524,21 +617,23 @@ export const useVoice = create<VoiceState>((set, get) => {
       }
       const lp = room.localParticipant
       const s = useSettings.getState().settings.voice
+      if (get().serverMuted && !lp.isScreenShareEnabled) return void toast.error('Você foi silenciado por um moderador e não pode compartilhar a tela agora.')
       try {
         if (lp.isScreenShareEnabled) {
           await lp.setScreenShareEnabled(false)
         } else {
+          const p = screenPreset(s.screenQuality, s.screenFps)
           await lp.setScreenShareEnabled(
             true,
             {
               audio: s.screenAudio,
-              resolution: screenRes(s.screenQuality, s.screenFps),
-              contentHint: 'detail',
+              resolution: p.resolution,
+              contentHint: p.fps === 60 ? 'motion' : 'detail',
               selfBrowserSurface: 'exclude',
               surfaceSwitching: 'include',
               systemAudio: s.screenAudio ? 'include' : 'exclude',
             },
-            { screenShareEncoding: { maxBitrate: 3_500_000, maxFramerate: s.screenFps } },
+            { screenShareEncoding: { maxBitrate: p.maxBitrate, maxFramerate: p.fps } },
           )
           if (s.screenAudio && !lp.getTrackPublication(Track.Source.ScreenShareAudio)) {
             toast.info(
@@ -547,9 +642,7 @@ export const useVoice = create<VoiceState>((set, get) => {
           }
         }
       } catch (e) {
-        const name = (e as { name?: string })?.name
-        if (name === 'NotAllowedError' || name === 'AbortError') toast.info('Compartilhamento cancelado.')
-        else handleMediaError(e, 'tela')
+        handleMediaError(e, 'tela')
       }
       sync()
     },
@@ -585,10 +678,8 @@ export const useVoice = create<VoiceState>((set, get) => {
 
     refreshProcessor: () => {
       const v = useSettings.getState().settings.voice
-      if (gate) {
-        gate.enabled = !v.autoSensitivity
-        gate.threshold = v.sensitivity
-      } else void installGate()
+      if (gate) gate.core.opts = { auto: v.autoSensitivity, sensitivity: v.sensitivity }
+      else void installGate()
       void applyMic()
     },
   }

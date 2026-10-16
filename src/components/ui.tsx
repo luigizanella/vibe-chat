@@ -3,7 +3,7 @@ import {
   type ButtonHTMLAttributes, type ReactNode,
 } from 'react'
 import clsx from 'clsx'
-import { AlertTriangle, CheckCircle2, Info, Loader2, X } from 'lucide-react'
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Info, Loader2, X } from 'lucide-react'
 import { useUI, type MenuItem } from '@/store/ui'
 import { colorFromId, initials } from '@/lib/format'
 import { mediaUrl } from '@/lib/media'
@@ -53,7 +53,7 @@ export function PresenceDot({ status, size = 10, ring = 'var(--bg-secondary)' }:
 }
 
 export function Avatar({
-  path, name, id, size = 32, status, ring, square, className,
+  path, name, id, size = 32, status, ring, square, className, speaking,
 }: {
   path?: string | null
   name: string
@@ -63,6 +63,8 @@ export function Avatar({
   ring?: string
   square?: boolean
   className?: string
+  /** Anel verde fino ao redor do avatar enquanto a pessoa fala. */
+  speaking?: boolean
 }) {
   const [failed, setFailed] = useState(false)
   const url = failed ? null : mediaUrl(path)
@@ -72,7 +74,7 @@ export function Avatar({
       style={{ width: size, height: size }}
     >
       <span
-        className="grid h-full w-full place-items-center overflow-hidden text-white"
+        className="grid h-full w-full place-items-center overflow-hidden text-white" /* iniciais sobre cor sólida gerada */
         style={{ background: url ? 'var(--bg-tertiary)' : colorFromId(id), borderRadius: square ? 'var(--radius-lg)' : '50%', fontSize: size * 0.38, fontWeight: 700 }}
       >
         {url ? (
@@ -81,6 +83,9 @@ export function Avatar({
           initials(name)
         )}
       </span>
+      {speaking && (
+        <span aria-hidden className="pointer-events-none absolute border-2 border-[var(--success)]" style={{ inset: -4, borderRadius: square ? 'var(--radius-lg)' : '50%' }} />
+      )}
       {status && <PresenceDot status={status} size={Math.max(8, size * 0.32)} ring={ring} />}
     </span>
   )
@@ -136,7 +141,7 @@ export function Modal({
         if (e.target === ref.current) close()
       }}
     >
-      <div className="flex max-h-[90vh] flex-col">
+      <div className="flex max-h-[90vh] flex-col bg-primary text-fg">
         <header className="flex items-start justify-between gap-4 px-5 pt-5">
           <div>
             <h2 id={titleId} className="m-0 text-xl font-bold">{title}</h2>
@@ -256,29 +261,119 @@ export function ContextMenuHost() {
   if (!menu) return null
   return (
     <div ref={ref} className="menu" role="menu" style={{ left: pos.x, top: pos.y }} onContextMenu={(e) => e.preventDefault()}>
-      {menu.items.map((it, i) =>
-        it.separator ? (
-          <div key={i} className="menu-sep" role="separator" />
-        ) : (
-          <button
-            key={i}
-            role="menuitem"
-            className={clsx('menu-item', it.danger && 'danger')}
-            disabled={it.disabled}
-            onClick={() => {
-              close()
-              it.onClick?.()
-            }}
-          >
-            <span className="flex items-center gap-2">{it.icon}{it.label}</span>
-            {it.hint && <span className="text-xs opacity-70">{it.hint}</span>}
-          </button>
-        ),
-      )}
+      <MenuList items={menu.items} onClose={close} />
     </div>
   )
 }
 
+function MenuRow({ it, onClose }: { it: MenuItem; onClose: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [val, setVal] = useState(it.value ?? 0)
+  const [checked, setChecked] = useState(!!it.checked)
+  if (it.separator) return <div className="menu-sep" role="separator" />
+
+  if (it.kind === 'slider') {
+    const fmt = it.format ?? ((v: number) => `${Math.round(v * 100)}%`)
+    return (
+      <div className="px-2 py-1.5" role="group" aria-label={it.label}>
+        <div className="mb-1 flex items-center justify-between text-sm text-fg-2">
+          <span>{it.label}</span>
+          <span className="text-xs tabular-nums">{fmt(val)}</span>
+        </div>
+        <input
+          type="range"
+          className="w-full"
+          min={it.min ?? 0}
+          max={it.max ?? 1}
+          step={it.step ?? 0.01}
+          value={val}
+          aria-label={it.label}
+          disabled={it.disabled}
+          onChange={(e) => {
+            const v = Number(e.target.value)
+            setVal(v)
+            it.onChange?.(v)
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (it.kind === 'checkbox') {
+    return (
+      <button
+        role="menuitemcheckbox"
+        aria-checked={checked}
+        className={clsx('menu-item', it.danger && 'danger')}
+        disabled={it.disabled}
+        data-tip={it.disabled ? it.tip : undefined}
+        data-tip-side="right"
+        onClick={() => {
+          setChecked(!checked)
+          it.onToggle?.(!checked)
+        }}
+      >
+        <span className="flex items-center gap-2">{it.icon}{it.label}</span>
+        <span className={clsx('grid h-4 w-4 place-items-center rounded-sm border', checked ? 'border-current bg-current' : 'border-current')} aria-hidden>
+          {checked && <Check size={12} className="text-[var(--bg-tertiary)]" />}
+        </span>
+      </button>
+    )
+  }
+
+  if (it.children) {
+    return (
+      <div className="relative" onMouseEnter={() => !it.disabled && setOpen(true)} onMouseLeave={() => setOpen(false)}>
+        <button
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className="menu-item"
+          disabled={it.disabled}
+          data-tip={it.disabled ? it.tip : undefined}
+          data-tip-side="right"
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => e.key === 'ArrowRight' && setOpen(true)}
+        >
+          <span className="flex items-center gap-2">{it.icon}{it.label}</span>
+          <ChevronRight size={14} aria-hidden />
+        </button>
+        {open && (
+          <div className="menu absolute top-[-6px] left-full ml-1" role="menu" style={{ position: 'absolute' }}>
+            <MenuList items={it.children} onClose={onClose} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <button
+      role="menuitem"
+      className={clsx('menu-item', it.danger && 'danger')}
+      disabled={it.disabled}
+      data-tip={it.disabled ? it.tip : undefined}
+      data-tip-side="right"
+      onClick={() => {
+        onClose()
+        it.onClick?.()
+      }}
+    >
+      <span className="flex items-center gap-2">{it.icon}{it.label}</span>
+      {it.hint && <span className="text-xs opacity-70">{it.hint}</span>}
+    </button>
+  )
+}
+
+function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+  return (
+    <>
+      {items.map((it, i) => (
+        <MenuRow key={i} it={it} onClose={onClose} />
+      ))}
+    </>
+  )
+}
 export function useContextMenu(build: () => MenuItem[]) {
   const open = useUI((s) => s.openMenu)
   return useCallback(

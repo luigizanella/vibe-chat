@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Paperclip, SmilePlus, X, Send, CornerUpLeft, AtSign, Lock } from 'lucide-react'
 import { sendMessage, scopeKey } from '@/data/messages'
 import { useTyping } from '@/data/presence'
+import { useServers } from '@/data/queries'
+import { parseMusicCommand, runMusicCommand } from '@/data/music'
 import { toast } from '@/store/ui'
 import { MAX_ATTACHMENT_BYTES } from '@/lib/media'
 import type { Message } from '@/lib/types'
@@ -33,6 +35,8 @@ export function Composer({ replyTo, onCancelReply, placeholder }: { replyTo: Mes
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const { typers, ping } = useTyping(ctx.scope)
+  const { data: servers } = useServers()
+  const isMusicChannel = ctx.scope.kind === 'channel' && !!ctx.serverId && servers?.find((s) => s.id === ctx.serverId)?.music_channel_id === ctx.scope.id
 
   // rascunho persistido por canal
   useEffect(() => {
@@ -108,6 +112,15 @@ export function Composer({ replyTo, onCancelReply, placeholder }: { replyTo: Mes
     const raw = text.trim()
     if (!raw && !files.length) return
     if (!ctx.canSend) return
+    // canal de comandos de música: o bot executa e responde no próprio canal
+    if (isMusicChannel && !files.length) {
+      const cmd = parseMusicCommand(raw)
+      if (cmd) {
+        setText('')
+        void runMusicCommand(cmd)
+        return
+      }
+    }
     const content = displayToTokens(raw, ctx.mentionables)
     if (/@everyone/.test(content) && !ctx.mentionables.length) {
       /* sem validação local; o servidor ignora @everyone sem permissão */
@@ -200,7 +213,7 @@ export function Composer({ replyTo, onCancelReply, placeholder }: { replyTo: Mes
             rows={1}
             value={text}
             maxLength={4000}
-            placeholder={placeholder}
+            placeholder={isMusicChannel ? 'Comandos de música: /tocar <link> · /pular · /pausar · /continuar · /voltar · /fila · /parar' : placeholder}
             aria-label={placeholder}
             className="max-h-[220px] min-h-[36px] flex-1 resize-none border-0 bg-transparent px-1 py-2 text-[0.95rem] outline-none"
             onChange={(e) => {

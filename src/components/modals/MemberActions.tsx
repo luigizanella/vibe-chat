@@ -59,6 +59,10 @@ export function MemberRolesModal({ serverId, member, roles, ctx }: { serverId: s
   )
 }
 
+export function askReason(title: string, confirmLabel: string, onConfirm: (reason: string) => Promise<void>) {
+  useUI.getState().openModal(<ReasonModal title={title} confirmLabel={confirmLabel} onConfirm={onConfirm} />)
+}
+
 function ReasonModal({ title, confirmLabel, onConfirm }: { title: string; confirmLabel: string; onConfirm: (reason: string) => Promise<void> }) {
   const close = useCloseModal()
   const [reason, setReason] = useState('')

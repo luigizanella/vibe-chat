@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Circle, Headphones, HeadphoneOff, Mic, MicOff, Moon, MinusCircle, EyeOff, PhoneOff, Settings, SmilePlus, Signal, Monitor, Video } from 'lucide-react'
 import { useSession } from '@/store/session'
 import { useUI } from '@/store/ui'
@@ -6,6 +7,7 @@ import { useVoice } from '@/store/voice'
 import { setCustomStatus, setStatus } from '@/data/actions'
 import { Avatar, Modal, PRESENCE_LABEL, Spinner, useCloseModal } from '@/components/ui'
 import { UserSettingsModal } from '@/components/settings/UserSettings'
+import { requestScreenShare } from '@/components/voice/ScreenShareModal'
 import { usePresenceOf } from '@/data/presence'
 import { errorMessage } from '@/lib/errors'
 import type { Presence, StatusPref } from '@/lib/types'
@@ -36,20 +38,23 @@ function CustomStatusModal() {
 }
 
 export function VoiceDock() {
-  const { status, target, participants, leave, retry } = useVoice()
+  const { status, target, participants, leave, retry, ping } = useVoice()
   const servers = useServers().data
+  const nav = useNavigate()
   if (!target || status === 'idle') return null
   const quality = participants.find((p) => p.isLocal)?.quality ?? 'unknown'
   const label = status === 'connected' ? 'Voz conectada' : status === 'connecting' ? 'Conectando…' : status === 'reconnecting' ? 'Reconectando…' : 'Falha na conexão'
-  const color = status === 'connected' ? 'text-success' : status === 'failed' ? 'text-danger' : 'text-warning'
+  const color = status === 'connected' ? 'text-[var(--success-text)]' : status === 'failed' ? 'text-[var(--danger-text)]' : 'text-warning'
   return (
     <div className="border-b border-border bg-[var(--bg-tertiary)] px-2.5 py-2">
       <div className="flex items-center gap-2">
-        <Signal size={18} className={color} aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className={`text-sm font-bold ${color}`}>{label}{status === 'connected' && quality !== 'unknown' && quality !== 'excellent' ? ` • ${quality === 'good' ? 'boa' : quality === 'poor' ? 'instável' : 'perdida'}` : ''}</div>
-          <div className="truncate text-xs text-fg-2">{target.name} / {servers?.find((s) => s.id === target.serverId)?.name}</div>
-        </div>
+        <span className={color} data-tip={ping !== null ? `Ping: ${ping} ms` : status === 'connected' ? 'Medindo ping…' : label} data-tip-side="top" tabIndex={0} aria-label={ping !== null ? `Ping: ${ping} milissegundos` : label}>
+          <Signal size={20} aria-hidden />
+        </span>
+        <button className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left" onClick={() => nav(`/app/s/${target.serverId}/${target.id}`)} aria-label={`Voltar para a chamada ${target.name}`} data-tip="Voltar para a chamada" data-tip-side="top">
+          <div className={`text-sm font-bold ${color}`}>{label}{status === 'connected' && ping !== null ? ` · ${ping} ms` : ''}{status === 'connected' && quality !== 'unknown' && quality !== 'excellent' ? ` · ${quality === 'good' ? 'boa' : quality === 'poor' ? 'instável' : 'perdida'}` : ''}</div>
+          <div className="truncate text-xs text-fg-2 hover:underline">{target.name} / {servers?.find((s) => s.id === target.serverId)?.name}</div>
+        </button>
         {status === 'failed' && <button className="btn btn-sm" onClick={() => void retry()}>Tentar</button>}
         <button className="icon-btn" onClick={() => void leave()} aria-label="Desconectar da voz" data-tip="Desconectar"><PhoneOff size={18} /></button>
       </div>
@@ -59,15 +64,25 @@ export function VoiceDock() {
 }
 
 function QuickControls() {
-  const { camOn, screenOn, toggleCamera, toggleScreen } = useVoice()
+  const { camOn, screenOn, toggleCamera, micLevel, micOpen, micThreshold, micMuted } = useVoice()
+  const level = micMuted ? 0 : micLevel
   return (
-    <div className="mt-2 flex gap-1">
-      <button className={`btn btn-sm flex-1 ${camOn ? 'btn-primary' : ''}`} onClick={() => void toggleCamera()} aria-pressed={camOn}><Video size={14} /> Vídeo</button>
-      <button className={`btn btn-sm flex-1 ${screenOn ? 'btn-primary' : ''}`} onClick={() => void toggleScreen()} aria-pressed={screenOn}><Monitor size={14} /> Tela</button>
+    <div className="mt-2">
+      <div className="flex gap-1">
+        <button className={`btn btn-sm flex-1 ${camOn ? 'btn-primary' : ''}`} onClick={() => void toggleCamera()} aria-pressed={camOn}><Video size={14} /> Vídeo</button>
+        <button className={`btn btn-sm flex-1 ${screenOn ? 'btn-primary' : ''}`} onClick={requestScreenShare} aria-pressed={screenOn}><Monitor size={14} /> {screenOn ? 'Parar' : 'Tela'}</button>
+      </div>
+      {screenOn && <div className="mt-1 text-xs font-semibold text-[var(--danger-text)]" role="status">● Você está transmitindo a tela</div>}
+      <div className="mt-2">
+        <div className="relative h-1.5 overflow-hidden rounded-full bg-[var(--bg-input)]" role="meter" aria-label="Nível do microfone enviado" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level)}>
+          <div className="h-full rounded-full" style={{ width: `${level}%`, background: micOpen ? 'var(--success)' : 'var(--text-muted)', transition: 'width 90ms linear' }} />
+          {micThreshold > 0 && <div className="absolute top-0 h-full w-0.5 bg-[var(--text-primary)]" style={{ left: `${micThreshold}%` }} />}
+        </div>
+        <div className="mt-0.5 text-[10px] text-fg-muted">{micMuted ? 'Microfone silenciado' : micOpen ? 'Transmitindo voz' : 'Sem voz (filtrando ruído)'}</div>
+      </div>
     </div>
   )
 }
-
 const STATUSES: { v: StatusPref; label: string; icon: React.ReactNode }[] = [
   { v: 'online', label: 'Online', icon: <Circle size={14} className="fill-[var(--presence-online)] text-[var(--presence-online)]" /> },
   { v: 'idle', label: 'Ausente', icon: <Moon size={14} className="fill-[var(--presence-idle)] text-[var(--presence-idle)]" /> },

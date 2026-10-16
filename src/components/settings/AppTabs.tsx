@@ -17,7 +17,7 @@ import { SettingRow, Toggle, Spinner } from '@/components/ui'
 import { errorMessage } from '@/lib/errors'
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="mt-0 mb-5 text-xl font-bold">{children}</h2>
-const ACCENTS = ['#7c6cff', '#4aa3ff', '#3ba55d', '#f0b232', '#ed7b42', '#ed4245', '#e05db0', '#2cc4c4']
+const ACCENTS = ['#6b5bff', '#2f7de1', '#1f8f55', '#c98a00', '#d9531e', '#d63a3d', '#c2398f', '#0e9aa7']
 
 export function AppearanceTab() {
   const { settings, update } = useSettings()

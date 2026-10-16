@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
   at.addGrant({
     roomJoin: true,
     room: `vc_${channelId}`,
-    canSubscribe: true,
+    canSubscribe: access.can_listen !== false, // ensurdecido pelo servidor: não assina áudio/vídeo
     canPublish: sources.length > 0,
     canPublishSources: sources,
     canPublishData: true,

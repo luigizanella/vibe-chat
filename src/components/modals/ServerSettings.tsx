@@ -2,21 +2,22 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowDown, ArrowUp, Camera, Crown, Hash, Link2, Plus, Shield, Trash2, Users, Volume2, X, Settings, Gavel, ListTree, Lock } from 'lucide-react'
+import { Camera, Crown, Hash, Link2, Plus, Shield, Trash2, Users, Volume2, X, Settings, Gavel, ListTree, Lock, Music } from 'lucide-react'
 import { rpc, supabase } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
-import { hasPerm, PERMISSIONS, topPosition, highestRole, type PermContext } from '@/lib/perms'
+import { hasPerm, highestRole, type PermContext } from '@/lib/perms'
 import { removePublicFile, uploadPublicImage } from '@/lib/media'
 import { formatDateTime } from '@/lib/format'
 import { qk, useBans, useCategories, useChannels, useMembers, useModLogs, usePermCtx, useRoles } from '@/data/queries'
-import { Avatar, ConfirmModal, EmptyState, Modal, Spinner, Toggle, confirmAction, useAction, useCloseModal } from '@/components/ui'
+import { Avatar, ConfirmModal, Modal, Spinner, confirmAction, useAction, useCloseModal } from '@/components/ui'
 import { toast, useUI } from '@/store/ui'
 import { useSession } from '@/store/session'
-import type { Role } from '@/lib/types'
 import { CategoryModal, ChannelModal, InviteModal } from './ServerModals'
 import { memberMenuItems } from './MemberActions'
+import { RolesTab } from './RolesTab'
+import { MusicSettings } from './MusicSettings'
 
-type Tab = 'overview' | 'roles' | 'channels' | 'members' | 'invites' | 'moderation'
+type Tab = 'overview' | 'roles' | 'channels' | 'members' | 'invites' | 'moderation' | 'music'
 
 function SettingsFrame({ title, tabs, tab, setTab, children }: { title: string; tabs: { id: string; label: string; icon: ReactNode }[]; tab: string; setTab: (t: never) => void; children: ReactNode }) {
   const close = useCloseModal()
@@ -26,7 +27,7 @@ function SettingsFrame({ title, tabs, tab, setTab, children }: { title: string; 
   }, [])
   return (
     <dialog ref={ref} className="modal" data-size="lg" style={{ maxWidth: 'min(96vw, 900px)', height: 'min(92vh, 680px)' }} onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label={title}>
-      <div className="flex h-full max-sm:flex-col">
+      <div className="flex h-full bg-primary text-fg max-sm:flex-col">
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-secondary p-2 sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3" aria-label={title}>
           <div className="mb-1 hidden truncate px-2 text-xs font-bold text-fg-muted uppercase sm:block">{title}</div>
           {tabs.map((t) => (
@@ -35,7 +36,7 @@ function SettingsFrame({ title, tabs, tab, setTab, children }: { title: string; 
             </button>
           ))}
         </nav>
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto p-5 sm:p-8">
+        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary p-5 text-fg sm:p-8">
           <button className="icon-btn absolute top-3 right-3" onClick={close} aria-label="Fechar" data-tip="Fechar (Esc)"><X size={20} /></button>
           {children}
         </section>
@@ -58,6 +59,7 @@ export function ServerSettingsModal({ serverId, initialTab = 'overview' }: { ser
     { id: 'members', label: 'Membros', icon: <Users size={16} /> },
     (can('create_invite') || can('manage_server')) && { id: 'invites', label: 'Convites', icon: <Link2 size={16} /> },
     (can('ban_members') || can('manage_server')) && { id: 'moderation', label: 'Moderação', icon: <Gavel size={16} /> },
+    can('manage_server') && { id: 'music', label: 'Música', icon: <Music size={16} /> },
   ].filter(Boolean) as { id: string; label: string; icon: ReactNode }[]
   const active = tabs.some((t) => t.id === tab) ? tab : (tabs[0].id as Tab)
   return (
@@ -68,6 +70,7 @@ export function ServerSettingsModal({ serverId, initialTab = 'overview' }: { ser
       {active === 'members' && <MembersTab ctx={ctx} />}
       {active === 'invites' && <InvitesTab ctx={ctx} />}
       {active === 'moderation' && <ModerationTab ctx={ctx} />}
+      {active === 'music' && <MusicSettings ctx={ctx} />}
     </SettingsFrame>
   )
 }
@@ -146,108 +149,6 @@ function Overview({ ctx }: { ctx: PermContext }) {
           </div>
         </div>
       ) : <p className="text-fg-muted">Somente o dono pode excluir ou transferir o servidor.</p>}
-    </div>
-  )
-}
-
-/* ----------------------------------------------------------------- cargos */
-function RolesTab({ ctx }: { ctx: PermContext }) {
-  const qc = useQueryClient()
-  const sid = ctx.server.id
-  const { data: roles } = useRoles(sid)
-  const [sel, setSel] = useState<string | null>(null)
-  const { busy, run } = useAction()
-  const myTop = topPosition(ctx)
-  const list = roles ?? []
-  const role = list.find((r) => r.id === sel)
-  const refresh = () => qc.invalidateQueries({ queryKey: qk.roles(sid) })
-
-  const create = () => run(async () => {
-    const id = await rpc<string>('create_role', { p_server: sid, p_name: 'Novo cargo', p_color: '#99aab5', p_permissions: [] })
-    await refresh()
-    setSel(id)
-  })
-
-  return (
-    <div>
-      <H>Cargos</H>
-      <div className="flex flex-col gap-5 md:flex-row">
-        <div className="md:w-56 md:shrink-0">
-          <button className="btn btn-primary mb-2 w-full" onClick={() => void create()} disabled={busy}><Plus size={14} /> Criar cargo</button>
-          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-            {list.map((r) => (
-              <li key={r.id}>
-                <button onClick={() => setSel(r.id)} className={clsx('flex w-full items-center gap-2 rounded-md border-0 px-2 py-1.5 text-left', sel === r.id ? 'bg-[var(--bg-selected)]' : 'bg-transparent hover:bg-[var(--bg-hover)]')}>
-                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: r.color }} />
-                  <span className="flex-1 truncate">{r.is_default ? `${r.name} (todos)` : r.name}</span>
-                  {r.position >= myTop && !r.is_default && <Lock size={12} className="text-fg-muted" aria-label="Acima do seu nível" />}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="min-w-0 flex-1">
-          {role ? <RoleEditor key={role.id} role={role} ctx={ctx} onChanged={refresh} onDeleted={() => { setSel(null); void refresh() }} /> : <EmptyState icon={<Shield />} title="Selecione um cargo">Cargos definem permissões e a hierarquia de moderação. Quanto maior a posição, mais poder.</EmptyState>}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function RoleEditor({ role, ctx, onChanged, onDeleted }: { role: Role; ctx: PermContext; onChanged: () => void; onDeleted: () => void }) {
-  const myTop = topPosition(ctx)
-  const locked = !role.is_default && role.position >= myTop
-  const editLocked = role.position >= myTop && !(role.is_default && myTop > 0)
-  const [name, setName] = useState(role.name)
-  const [color, setColor] = useState(role.color)
-  const [perms, setPerms] = useState(new Set(role.permissions))
-  const { busy, run } = useAction()
-  const dirty = name !== role.name || color !== role.color || perms.size !== role.permissions.length || role.permissions.some((p) => !perms.has(p))
-
-  const save = () => run(async () => {
-    await rpc('update_role', { p_role: role.id, p_name: name, p_color: color, p_permissions: [...perms], p_position: null })
-    onChanged()
-    toast.success('Cargo salvo.')
-  })
-  const move = (delta: number) => run(async () => {
-    await rpc('update_role', { p_role: role.id, p_name: null, p_color: null, p_permissions: null, p_position: Math.max(1, role.position + delta) })
-    onChanged()
-  })
-
-  return (
-    <div>
-      {locked && <p className="card mb-3 text-fg-2">Este cargo está no seu nível ou acima: você não pode editá-lo.</p>}
-      <div className="grid grid-cols-[1fr_auto] gap-3">
-        <div className="field"><label htmlFor="r-n">Nome</label><input id="r-n" className="input" value={name} maxLength={50} disabled={editLocked || role.is_default} onChange={(e) => setName(e.target.value)} /></div>
-        <div className="field"><label htmlFor="r-c">Cor</label><input id="r-c" type="color" className="h-[38px] w-14 cursor-pointer rounded border-0 bg-transparent p-0" value={color} disabled={editLocked} onChange={(e) => setColor(e.target.value)} /></div>
-      </div>
-      {!role.is_default && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="label">Posição na hierarquia: {role.position}</span>
-          <button className="icon-btn" aria-label="Subir cargo" data-tip="Subir" disabled={busy || editLocked || role.position + 1 >= myTop} onClick={() => void move(1)}><ArrowUp size={16} /></button>
-          <button className="icon-btn" aria-label="Descer cargo" data-tip="Descer" disabled={busy || editLocked || role.position <= 1} onClick={() => void move(-1)}><ArrowDown size={16} /></button>
-        </div>
-      )}
-      <div className="mt-5 flex flex-col">
-        {(['geral', 'texto', 'voz'] as const).map((g) => (
-          <div key={g} className="mb-2">
-            <div className="label mb-1">{g === 'geral' ? 'Gerais' : g === 'texto' ? 'Texto' : 'Voz e vídeo'}</div>
-            {PERMISSIONS.filter((p) => p.group === g).map((p) => {
-              const can = hasPerm(ctx, p.key)
-              return (
-                <div key={p.key} className="flex items-center justify-between gap-4 border-b border-border py-2">
-                  <div className="min-w-0"><div className="font-semibold">{p.label}</div><div className="text-xs text-fg-muted">{p.description}</div></div>
-                  <Toggle checked={perms.has(p.key)} label={p.label} disabled={editLocked || !can} onChange={(v) => setPerms((s) => { const n = new Set(s); if (v) n.add(p.key); else n.delete(p.key); return n })} />
-                </div>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 flex gap-2">
-        <button className="btn btn-primary" disabled={busy || !dirty || editLocked} onClick={() => void save()}>{busy && <Spinner size={14} />} Salvar</button>
-        {!role.is_default && <button className="btn btn-danger" disabled={editLocked} onClick={() => confirmAction({ title: `Excluir cargo “${role.name}”`, message: 'Os membros perderão este cargo.', confirmLabel: 'Excluir', danger: true, onConfirm: async () => { await rpc('delete_role', { p_role: role.id }); onDeleted() } })}><Trash2 size={14} /> Excluir</button>}
-      </div>
     </div>
   )
 }
@@ -407,7 +308,7 @@ function InvitesTab({ ctx }: { ctx: PermContext }) {
 const ACTION_LABEL: Record<string, string> = {
   server_created: 'Servidor criado', server_updated: 'Servidor editado', ownership_transferred: 'Propriedade transferida',
   role_created: 'Cargo criado', role_updated: 'Cargo editado', role_deleted: 'Cargo excluído', role_granted: 'Cargo atribuído',
-  role_revoked: 'Cargo removido', kick: 'Expulsão', ban: 'Banimento', unban: 'Banimento revertido', message_deleted: 'Mensagem apagada por moderação',
+  role_revoked: 'Cargo removido', kick: 'Expulsão', ban: 'Banimento', unban: 'Banimento revertido', message_deleted: 'Mensagem apagada por moderação', timeout: 'Castigo', timeout_removed: 'Castigo removido', voice_mute: 'Silenciado na voz', voice_unmute: 'Silêncio removido', voice_deafen: 'Áudio desativado', voice_undeafen: 'Áudio restaurado', voice_disconnect: 'Desconectado da voz', voice_move: 'Movido de canal de voz', music_bot_on: 'Bot de música ligado', music_bot_off: 'Bot de música desligado', roles_reordered: 'Cargos reordenados',
 }
 
 function ModerationTab({ ctx }: { ctx: PermContext }) {

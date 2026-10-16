@@ -9,6 +9,19 @@ export interface MenuItem {
   disabled?: boolean
   separator?: boolean
   hint?: string
+  /** Explica por que o item está desabilitado (tooltip). */
+  tip?: string
+  /** Tipo do item: padrão, controle deslizante, caixa de seleção ou submenu. */
+  kind?: 'slider' | 'checkbox'
+  value?: number
+  min?: number
+  max?: number
+  step?: number
+  format?: (v: number) => string
+  onChange?: (v: number) => void
+  checked?: boolean
+  onToggle?: (checked: boolean) => void
+  children?: MenuItem[]
 }
 
 export interface Toast {

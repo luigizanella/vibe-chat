@@ -27,7 +27,7 @@ export function dmTitle(dm: DmConversation, me: string): { name: string; people:
 function DmAvatar({ dm, me, size = 32 }: { dm: DmConversation; me: string; size?: number }) {
   const t = dmTitle(dm, me)
   const status = usePresenceOf(t.otherId)
-  if (dm.is_group) return <span className="grid shrink-0 place-items-center rounded-full bg-accent text-white" style={{ width: size, height: size }}><Users size={size * 0.5} /></span>
+  if (dm.is_group) return <span className="grid shrink-0 place-items-center rounded-full bg-accent text-[var(--accent-contrast)]" style={{ width: size, height: size }}><Users size={size * 0.5} /></span>
   return <Avatar path={t.people[0]?.avatar_path} name={t.name} id={t.otherId ?? dm.id} size={size} status={status} ring="var(--bg-secondary)" />
 }
 

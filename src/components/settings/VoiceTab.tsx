@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, Play, Video, VideoOff } from 'lucide-react'
 import { useSettings } from '@/store/settings'
-import { levelFromDb, useVoice } from '@/store/voice'
+import { useVoice } from '@/store/voice'
+import { isTauri } from '@/lib/env'
+import { GateCore, levelFromDb } from '@/lib/gate'
+import { queryMediaPermissions, reportMediaError, permissionSteps } from '@/lib/mediaErrors'
 import { codeLabel } from '@/lib/keys'
 import { SettingRow, Toggle } from '@/components/ui'
 import { toast } from '@/store/ui'
@@ -38,6 +41,25 @@ function useDevices() {
   return { devices, labelsHidden, requestAccess, refresh }
 }
 
+function useMediaPermissions() {
+  const [p, setP] = useState<{ microphone: PermissionState | 'unknown'; camera: PermissionState | 'unknown' } | null>(null)
+  useEffect(() => {
+    let alive = true
+    void queryMediaPermissions().then((r) => alive && setP(r))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return p
+}
+
+const PERM_LABEL: Record<string, { text: string; cls: string }> = {
+  granted: { text: 'Permitido', cls: 'text-[var(--success-text)]' },
+  denied: { text: 'Bloqueado', cls: 'text-[var(--danger-text)]' },
+  prompt: { text: 'Vai perguntar ao usar', cls: 'text-fg-2' },
+  unknown: { text: 'Desconhecido', cls: 'text-fg-muted' },
+}
+
 export function VoiceTab() {
   const { settings, updateVoice } = useSettings()
   const v = settings.voice
@@ -52,6 +74,9 @@ export function VoiceTab() {
   const [testing, setTesting] = useState(false)
   const [level, setLevel] = useState(0)
   const [loopback, setLoopback] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [autoThr, setAutoThr] = useState(0)
+  const perms = useMediaPermissions()
   const stop = useRef<(() => void) | null>(null)
   const loopRef = useRef(loopback)
   loopRef.current = loopback
@@ -65,26 +90,38 @@ export function VoiceTab() {
       })
       const ctx = new AudioContext()
       const src = ctx.createMediaStreamSource(stream)
+      const hp = ctx.createBiquadFilter()
+      hp.type = 'highpass'
+      hp.frequency.value = 90
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 1024
-      src.connect(analyser)
+      src.connect(hp)
+      hp.connect(analyser)
       const dest = ctx.createMediaStreamDestination()
       const gain = ctx.createGain()
       gain.gain.value = 0
-      src.connect(gain).connect(dest)
+      hp.connect(gain).connect(dest)
       const el = new Audio()
       el.srcObject = dest.stream
       const sink = el as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }
       if (v.outputId && sink.setSinkId) await sink.setSinkId(v.outputId).catch(() => undefined)
       void el.play().catch(() => undefined)
+      // mesmo gate usado na chamada: o que passa aqui é o que seria enviado
+      const gate = new GateCore({ auto: true, sensitivity: 35 })
       const buf = new Float32Array(analyser.fftSize)
       let raf = 0
       const tick = () => {
+        const cur = useSettings.getState().settings.voice
+        gate.opts = { auto: cur.autoSensitivity, sensitivity: cur.sensitivity }
         analyser.getFloatTimeDomainData(buf)
         let sum = 0
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
-        setLevel(levelFromDb(20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-9)))
-        gain.gain.value = loopRef.current ? 1 : 0
+        const db = 20 * Math.log10(Math.sqrt(sum / buf.length) || 1e-9)
+        const open = gate.update(db, performance.now())
+        setLevel(levelFromDb(db))
+        setSending(open)
+        setAutoThr(levelFromDb(gate.thresholdDb))
+        gain.gain.value = loopRef.current && open ? 1 : 0
         raf = requestAnimationFrame(tick)
       }
       tick()
@@ -96,14 +133,13 @@ export function VoiceTab() {
         el.pause()
         setTesting(false)
         setLevel(0)
+        setSending(false)
         stop.current = null
       }
     } catch (e) {
-      const name = (e as { name?: string }).name
-      toast.error(name === 'NotAllowedError' ? 'Permissão do microfone negada.' : 'Não foi possível abrir o microfone selecionado.')
+      reportMediaError(e, 'microphone')
     }
   }
-
   /* -------- teste de saída -------- */
   const testOutput = async () => {
     try {
@@ -157,7 +193,21 @@ export function VoiceTab() {
   return (
     <div className="max-w-xl">
       <H>Voz e vídeo</H>
-      {labelsHidden && (
+      <div className="card mb-5">
+        <div className="mb-2 font-semibold">Permissões deste {isTauri ? 'aplicativo' : 'site'}</div>
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+          {([['Microfone', perms?.microphone], ['Câmera', perms?.camera]] as const).map(([n, st]) => (
+            <span key={n}>{n}: <strong className={PERM_LABEL[st ?? 'unknown'].cls}>{PERM_LABEL[st ?? 'unknown'].text}</strong></span>
+          ))}
+        </div>
+        {(perms?.microphone === 'denied' || perms?.camera === 'denied') && (
+          <details className="mt-2" open>
+            <summary className="cursor-pointer font-semibold text-[var(--danger-text)]">Como liberar</summary>
+            <ol className="mt-1 mb-0 list-decimal pl-5 text-fg-2">{permissionSteps(perms?.camera === 'denied' && perms?.microphone !== 'denied' ? 'camera' : 'microphone').map((s) => <li key={s}>{s}</li>)}</ol>
+          </details>
+        )}
+        <div className="hint mt-2">O navegador/Windows pergunta na primeira vez que você usa. Nada é capturado sem a sua ação.</div>
+      </div>      {labelsHidden && (
         <div className="card mb-5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-fg-2">Para listar os nomes dos dispositivos, o navegador precisa de permissão.</span>
           <button className="btn btn-primary btn-sm" onClick={() => void requestAccess(false)}><Mic size={14} /> Permitir acesso</button>
@@ -178,23 +228,26 @@ export function VoiceTab() {
       </div>
 
       <div className="mt-5">
-        <div className="mb-1 flex justify-between text-xs"><span className="label">Nível do microfone</span>{testing && <span className="text-fg-muted">{loopback ? 'Você está se ouvindo — use fones!' : 'Fale algo'}</span>}</div>
-        <div className="relative h-3 overflow-hidden rounded-full bg-tertiary" role="meter" aria-valuenow={Math.round(level)} aria-valuemin={0} aria-valuemax={100} aria-label="Nível do microfone">
-          <div className="h-full rounded-full" style={{ width: `${level}%`, background: !v.autoSensitivity && level < v.sensitivity ? 'var(--text-muted)' : 'var(--success)', transition: 'width 60ms linear' }} />
-          {!v.autoSensitivity && <div className="absolute top-0 h-full w-0.5 bg-white" style={{ left: `${v.sensitivity}%` }} />}
+        <div className="mb-1 flex justify-between text-xs">
+          <span className="label">Nível do microfone (o que seria enviado)</span>
+          {testing && <span className={sending ? 'font-semibold text-[var(--success-text)]' : 'text-fg-muted'}>{sending ? 'Transmitindo voz' : 'Silêncio / ruído filtrado'}</span>}
         </div>
-        {testing && <label className="mt-2 flex items-center gap-2 text-fg-2"><input type="checkbox" checked={loopback} onChange={(e) => setLoopback(e.target.checked)} /> Ouvir meu próprio microfone (risco de eco sem fones)</label>}
+        <div className="relative h-3 overflow-hidden rounded-full bg-tertiary" role="meter" aria-valuenow={Math.round(level)} aria-valuemin={0} aria-valuemax={100} aria-label="Nível do microfone">
+          <div className="h-full rounded-full" style={{ width: `${level}%`, background: testing && sending ? 'var(--success)' : 'var(--text-muted)', transition: 'width 60ms linear' }} />
+          {testing && <div className="absolute top-0 h-full w-0.5 bg-[var(--text-primary)]" style={{ left: `${v.autoSensitivity ? autoThr : v.sensitivity}%` }} aria-hidden />}
+        </div>
+        <div className="mt-1 text-xs text-fg-muted">{testing ? (loopback ? 'Você está se ouvindo — use fones para evitar eco!' : 'Fale normalmente: a barra deve ficar verde. O traço branco é o limite do filtro.') : 'Clique em “Testar microfone” para ver o nível ao vivo.'}</div>
+        {testing && <label className="mt-2 flex items-center gap-2 text-fg-2"><input type="checkbox" checked={loopback} onChange={(e) => setLoopback(e.target.checked)} /> Ouvir o que está sendo enviado (use fones)</label>}
       </div>
 
-      <SettingRow title="Sensibilidade automática" description="Desligue para definir o limite abaixo do qual o microfone é silenciado.">
+      <SettingRow title="Sensibilidade automática" description="Aprende o ruído do ambiente (ventilador, teclado) e só transmite quando você fala acima dele. Recomendado.">
         <Toggle checked={v.autoSensitivity} onChange={(a) => { updateVoice({ autoSensitivity: a }); refreshProcessor() }} label="Sensibilidade automática" />
       </SettingRow>
       {!v.autoSensitivity && (
-        <div className="field"><label htmlFor="sens">Limite de sensibilidade: {v.sensitivity}</label>
-          <input id="sens" type="range" min={1} max={90} value={v.sensitivity} onChange={(e) => { updateVoice({ sensitivity: Number(e.target.value) }); refreshProcessor() }} />
-          <span className="hint">Fale normalmente: a barra verde deve passar do marcador branco.</span></div>
-      )}
-      <SettingRow title="Supressão de ruído" description="Filtro do navegador. Aplica-se ao entrar na próxima chamada."><Toggle checked={v.noiseSuppression} onChange={(a) => updateVoice({ noiseSuppression: a })} label="Supressão de ruído" /></SettingRow>
+        <div className="field mb-2"><label htmlFor="sens">Limite do filtro: {v.sensitivity === 0 ? 'desligado (envia tudo)' : v.sensitivity}</label>
+          <input id="sens" type="range" min={0} max={100} step={1} value={v.sensitivity} onChange={(e) => { updateVoice({ sensitivity: Number(e.target.value) }); refreshProcessor() }} aria-valuetext={`${v.sensitivity} de 100`} />
+          <span className="hint">Teste o microfone e ajuste até o ruído de fundo ficar abaixo do traço e a sua voz acima. Mais para a direita = filtra mais.</span></div>
+      )}      <SettingRow title="Supressão de ruído" description="Filtro do navegador. Aplica-se ao entrar na próxima chamada."><Toggle checked={v.noiseSuppression} onChange={(a) => updateVoice({ noiseSuppression: a })} label="Supressão de ruído" /></SettingRow>
       <SettingRow title="Cancelamento de eco"><Toggle checked={v.echoCancellation} onChange={(a) => updateVoice({ echoCancellation: a })} label="Cancelamento de eco" /></SettingRow>
       <SettingRow title="Controle automático de ganho"><Toggle checked={v.autoGainControl} onChange={(a) => updateVoice({ autoGainControl: a })} label="Controle automático de ganho" /></SettingRow>
       <SettingRow title="Entrar em chamadas com o microfone silenciado"><Toggle checked={v.joinMuted} onChange={(a) => updateVoice({ joinMuted: a })} label="Entrar silenciado" /></SettingRow>
@@ -224,9 +277,9 @@ export function VoiceTab() {
       <h3 className="mt-0">Compartilhamento de tela</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="field"><label htmlFor="v-sq">Resolução</label>
-          <select id="v-sq" className="select" value={v.screenQuality} onChange={(e) => updateVoice({ screenQuality: e.target.value as typeof v.screenQuality })}><option value="720p">720p</option><option value="1080p">1080p</option><option value="1440p">1440p</option></select></div>
+          <select id="v-sq" className="select" value={v.screenQuality === '720p' ? '720p' : '1080p'} onChange={(e) => updateVoice({ screenQuality: e.target.value as typeof v.screenQuality })}><option value="720p">720p</option><option value="1080p">1080p</option></select></div>
         <div className="field"><label htmlFor="v-fps">Quadros por segundo</label>
-          <select id="v-fps" className="select" value={v.screenFps} onChange={(e) => updateVoice({ screenFps: Number(e.target.value) as typeof v.screenFps })}><option value={15}>15 fps</option><option value={30}>30 fps</option><option value={60}>60 fps</option></select></div>
+          <select id="v-fps" className="select" value={v.screenFps === 60 ? 60 : 30} onChange={(e) => updateVoice({ screenFps: Number(e.target.value) as typeof v.screenFps })}><option value={30}>30 fps</option><option value={60}>60 fps</option></select></div>
       </div>
       <SettingRow title="Tentar compartilhar áudio do sistema" description="Depende do navegador e do sistema: no Windows, Chrome/Edge permitem ao compartilhar a tela inteira ou uma aba."><Toggle checked={v.screenAudio} onChange={(a) => updateVoice({ screenAudio: a })} label="Compartilhar áudio do sistema" /></SettingRow>
       <p className="hint">Qualidade maior usa mais banda de subida e CPU — veja docs/COSTS.md para limites do plano gratuito.</p>

@@ -214,3 +214,8 @@ export function useTyping(scope: Scope | null) {
 
   return { typers: Object.entries(typers).map(([id, v]) => ({ id, name: v.name })), ping, clearOne }
 }
+
+/** Canal de voz em que a pessoa está agora neste servidor (pela presença em tempo real), se houver. */
+export function voiceChannelOf(userId: string, serverId: string): string | null {
+  return usePresenceStore.getState().byTopic[`srv:${serverId}`]?.[userId]?.voice ?? null
+}

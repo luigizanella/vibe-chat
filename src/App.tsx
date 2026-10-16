@@ -21,6 +21,33 @@ const queryClient = new QueryClient({
 function SessionBoot() {
   const init = useSession((s) => s.init)
   useEffect(() => init(), [init])
+
+  // App desktop: sem menu nativo do navegador (Voltar/Atualizar/Salvar como…). Campos de texto mantêm copiar/colar.
+  useEffect(() => {
+    if (!isTauri) return
+    const onMenu = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, [contenteditable="true"]')) return
+      e.preventDefault()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && ['p', 's', 'u'].includes(e.key.toLowerCase())) e.preventDefault()
+    }
+    // links externos (http/https) abrem no navegador padrão, não dentro do app
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.<HTMLAnchorElement>('a[href]')
+      if (!a || !/^https?:\/\//i.test(a.href) || a.origin === window.location.origin) return
+      e.preventDefault()
+      void import('@tauri-apps/plugin-opener').then((m) => m.openUrl(a.href))
+    }
+    document.addEventListener('contextmenu', onMenu)
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('click', onClick)
+    return () => {
+      document.removeEventListener('contextmenu', onMenu)
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('click', onClick)
+    }
+  }, [])
   return null
 }
 

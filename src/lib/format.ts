@@ -42,7 +42,7 @@ export function initials(name: string): string {
 export function colorFromId(id: string): string {
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return `hsl(${h % 360} 55% 48%)`
+  return `hsl(${h % 360} 48% 36%)`
 }
 
 export function formatRelative(iso: string): string {

@@ -17,6 +17,7 @@ export interface Profile {
   custom_status: string
   status_pref: StatusPref
   onboarded: boolean
+  is_bot: boolean
   disabled_at: string | null
   created_at: string
 }
@@ -27,8 +28,31 @@ export interface Server {
   name: string
   icon_path: string | null
   owner_id: string
+  music_channel_id: string | null
   created_at: string
 }
+export interface MusicSession {
+  channel_id: string
+  server_id: string
+  status: 'idle' | 'playing' | 'paused'
+  video_id: string | null
+  title: string | null
+  added_by: string | null
+  started_at: string | null
+  paused_ms: number
+  prev_video_id: string | null
+  prev_title: string | null
+  rev: number
+}
+export interface MusicQueueItem {
+  id: number
+  channel_id: string
+  ord: number
+  video_id: string
+  title: string
+  added_by: string | null
+}
+
 export interface Role {
   id: string
   server_id: string
@@ -37,12 +61,17 @@ export interface Role {
   position: number
   permissions: string[]
   is_default: boolean
+  /** Exibir os membros com este cargo em um grupo separado na lista. */
+  hoist: boolean
 }
 export interface Member {
   server_id: string
   user_id: string
   nickname: string | null
   joined_at: string
+  timeout_until: string | null
+  voice_muted: boolean
+  voice_deafened: boolean
   profile: Profile | null
   member_roles: { role_id: string }[]
 }

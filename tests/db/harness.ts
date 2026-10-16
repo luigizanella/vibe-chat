@@ -46,6 +46,11 @@ grant usage on schema realtime to authenticated;
 grant select, insert on realtime.messages to authenticated;
 grant execute on function realtime.topic() to authenticated;
 
+create table realtime.sent_log (id bigserial primary key, topic text, event text, payload jsonb);
+create function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language sql as $$
+  insert into realtime.sent_log (topic, event, payload) values (topic, event, payload)
+$$;
+
 create publication supabase_realtime;
 grant usage on schema public to anon, authenticated, service_role;
 `

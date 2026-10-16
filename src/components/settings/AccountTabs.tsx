@@ -97,7 +97,7 @@ export function ProfileTab() {
           {unameState === 'taken' && <span className="error-text">Já está em uso.</span>}
           {unameState === 'invalid' && <span className="error-text">Use 2–32 letras minúsculas, números, “_” ou “.”.</span>}
         </div>
-        <div className="field"><label htmlFor="p-bio">Sobre mim</label><textarea id="p-bio" className="textarea" maxLength={300} value={bio} onChange={(e) => setBio(e.target.value)} /><span className="hint">{bio.length}/300</span></div>
+        <div className="field"><label htmlFor="p-bio">Sobre mim</label><textarea id="p-bio" className="textarea" maxLength={300} value={bio} onChange={(e) => setBio(e.target.value)} /><span className="hint">{bio.length}/300 · Links http/https ficam clicáveis no seu perfil.</span></div>
         <div className="field"><label htmlFor="p-bc">Cor do banner</label><input id="p-bc" type="color" value={bannerColor} onChange={(e) => setBannerColor(e.target.value)} className="h-9 w-16 cursor-pointer rounded border-0 bg-transparent p-0" /></div>
       </div>
       <p className="hint mt-4">Conta criada em {formatDate(profile.created_at)}.</p>

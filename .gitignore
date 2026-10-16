@@ -19,3 +19,6 @@ supabase/.secrets.env
 src-tauri/.updater-private.key
 
 .tokens.env
+
+src-tauri/icons/android
+src-tauri/icons/ios

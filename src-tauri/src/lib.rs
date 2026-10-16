@@ -2,7 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WindowEvent,
+    webview::{PermissionKind, PermissionResponse},
+    AppHandle, Manager, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -30,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -37,6 +39,29 @@ pub fn run() {
         .manage(CloseToTray(AtomicBool::new(true)))
         .invoke_handler(tauri::generate_handler![set_close_to_tray])
         .setup(|app| {
+            // A janela é criada aqui (e não pelo tauri.conf.json) para registrar o tratador de permissões
+            // do WebView2. Sem ele, o Windows/WebView2 pode negar câmera/microfone/tela sem mostrar
+            // pergunta nenhuma. O app só carrega o próprio conteúdo (CSP restritiva, sem frames
+            // externos), então liberar estas capacidades aqui equivale a "o app pode pedir ao
+            // usuário": o sistema operacional continua exigindo a permissão de privacidade do Windows
+            // e o seletor de tela continua sendo escolhido pelo usuário.
+            let cfg = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .expect("janela principal ausente em tauri.conf.json");
+            WebviewWindowBuilder::from_config(app.handle(), &cfg)?
+                .on_permission_request(|_webview, kind| match kind {
+                    PermissionKind::Microphone
+                    | PermissionKind::Camera
+                    | PermissionKind::DisplayCapture
+                    | PermissionKind::Notifications => PermissionResponse::Allow,
+                    _ => PermissionResponse::Default,
+                })
+                .build()?;
+
             let open = MenuItem::with_id(app, "open", "Abrir Vibe Chat", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quit])?;

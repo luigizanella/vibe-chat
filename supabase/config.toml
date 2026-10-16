@@ -37,3 +37,6 @@ verify_jwt = true
 
 [functions.delete-account]
 verify_jwt = true
+
+[functions.voice-moderate]
+verify_jwt = true

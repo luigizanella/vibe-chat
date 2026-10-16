@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Camera, CheckCircle2, MailCheck, MessageCircle, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, MailCheck, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { appOrigin, isConfigured } from '@/lib/env'
 import { errorMessage } from '@/lib/errors'
@@ -17,7 +17,7 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
     >
       <div className="w-full max-w-[440px] rounded-xl border border-border bg-primary p-6 shadow-[var(--shadow)] sm:p-8" style={{ animation: 'pop-in var(--dur) var(--ease)' }}>
         <div className="mb-5 flex flex-col items-center text-center">
-          <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent text-white"><MessageCircle size={26} /></div>
+          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-16 w-16 rounded-2xl" draggable={false} />
           <h1 className="m-0 text-2xl font-bold">{title}</h1>
           {subtitle && <p className="mt-1 mb-0 text-fg-2">{subtitle}</p>}
         </div>
