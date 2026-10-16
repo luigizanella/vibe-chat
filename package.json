@@ -1,7 +1,7 @@
 {
   "name": "vibe-chat",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Plataforma de comunicação privada (texto, voz, vídeo e tela) para grupos pequenos.",
   "scripts": {
