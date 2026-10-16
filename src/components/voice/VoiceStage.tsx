@@ -31,6 +31,8 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
   const version = useVoice((s) => s.version)
   const volume = useVoice((s) => s.volumes[spec.identity] ?? 1)
   const setVolume = useVoice((s) => s.setVolume)
+  const watching = useVoice((s) => s.watching)
+  const watch = useVoice((s) => s.watch)
   const videoRef = useRef<HTMLVideoElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const { p, kind } = spec
@@ -53,6 +55,7 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
   const name = localNick(p.identity, member?.nickname || member?.profile?.display_name || p.name)
   const label = kind === 'screen' ? `Tela de ${name}` : name
   const mirror = p.isLocal && kind === 'camera'
+  const notWatched = kind === 'screen' && !p.isLocal && watching !== p.identity
 
   return (
     <div
@@ -61,7 +64,13 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
       onDoubleClick={() => void wrapRef.current?.requestFullscreen?.()}
       onContextMenu={(e) => userMenu(p.identity, e)}
     >
-      {hasVideo ? (
+      {notWatched ? (
+        <div className="grid h-full w-full place-content-center justify-items-center gap-2 bg-[var(--bg-tertiary)] p-3 text-center">
+          <Avatar path={member?.profile?.avatar_path} name={name} id={p.identity} size={big ? 96 : 48} />
+          <span className="rounded bg-[var(--danger)] px-1.5 text-[11px] leading-5 font-bold text-white">AO VIVO</span>
+          <button className="btn btn-primary btn-sm" onClick={() => watch(p.identity)}><Monitor size={14} /> Assistir transmissão</button>
+        </div>
+      ) : hasVideo ? (
         <video ref={videoRef} autoPlay playsInline muted className={clsx('h-full w-full', kind === 'screen' ? 'object-contain bg-black' : 'object-cover', mirror && '-scale-x-100')} aria-label={label} />
       ) : (
         <div className="grid h-full w-full place-items-center">
@@ -70,7 +79,7 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
         </div>
       )}
       <div className="absolute bottom-0 left-0 flex max-w-full items-center gap-1.5 rounded-tr-lg bg-black/60 px-2 py-1 text-xs text-white">
-        {kind === 'screen' && <Monitor size={12} />}
+        {kind === 'screen' && <span className="rounded bg-[var(--danger)] px-1 text-[10px] leading-4 font-bold text-white">AO VIVO</span>}
         {!p.micOn && kind === 'camera' && <MicOff size={12} className="text-[var(--danger)]" aria-label="Microfone desligado" />}
         <button className="truncate border-0 bg-transparent p-0 font-semibold text-inherit hover:underline" onClick={(e) => { e.stopPropagation(); openProfile(p.identity, serverId, e.clientX, e.clientY - 360) }}>{label}{p.isLocal ? ' (você)' : ''}</button>
         {p.quality !== 'unknown' && p.quality !== 'excellent' && <Signal size={12} className={p.quality === 'good' ? 'text-warning' : 'text-danger'} aria-label={`Conexão ${p.quality}`} />}
@@ -82,6 +91,7 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
             <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVolume(p.identity, Number(e.target.value))} className="w-20" aria-label={`Volume de ${name}`} />
           </div>
         )}
+        {kind === 'screen' && !p.isLocal && !notWatched && <button className="btn btn-sm" onClick={() => watch(null)}><MonitorOff size={13} /> Parar de assistir</button>}
         <button className="icon-btn h-7 w-7 text-white" onClick={onFocus} aria-label={focused ? 'Soltar destaque' : 'Destacar'} data-tip={focused ? 'Soltar destaque' : 'Destacar'}>{focused ? <PinOff size={15} /> : <Pin size={15} />}</button>
         <button className="icon-btn h-7 w-7 text-white" onClick={() => void wrapRef.current?.requestFullscreen?.()} aria-label="Tela cheia" data-tip="Tela cheia"><Maximize2 size={15} /></button>
       </div>
@@ -147,7 +157,8 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
 
   const focusedTile = tiles.find((t) => t.key === focus)
   const screenTiles = tiles.filter((t) => t.kind === 'screen')
-  const spotlight = focusedTile ?? (screenTiles.length ? screenTiles[screenTiles.length - 1] : undefined)
+  const watching = useVoice((s) => s.watching)
+  const spotlight = focusedTile ?? screenTiles.find((t) => t.identity === watching) ?? screenTiles.find((t) => t.p.isLocal) ?? undefined
 
   useEffect(() => {
     if (focus && !tiles.some((t) => t.key === focus)) setFocus(null)

@@ -11,7 +11,7 @@ import { errorMessage } from '@/lib/errors'
 import { hasPerm } from '@/lib/perms'
 import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useUnread } from '@/data/queries'
 import { findPref, markChannelsRead, setNotifPref } from '@/data/actions'
-import { useVoiceOccupants } from '@/data/presence'
+import { useLiveUsers, useVoiceOccupants } from '@/data/presence'
 import { MUSIC_BOT_ID, useServerMusic } from '@/data/music'
 import { useVoiceMove } from '@/data/voiceMove'
 import { useUI, toast } from '@/store/ui'
@@ -51,6 +51,9 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const userMenu = useUserMenu(serverId)
   const localNick = useLocalNick()
   const mv = useVoiceMove(serverId)
+  const liveUsers = useLiveUsers()
+  const joinVoice = useVoice((s) => s.join)
+  const nav = useNavigate()
   const { data: sessions } = useServerMusic(ch.kind === 'voice' ? serverId : undefined)
   const playing = sessions?.find((x) => x.channel_id === ch.id && x.status !== 'idle')
   const Icon = ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
@@ -97,6 +100,9 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
                 <button className="flex h-8 w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 text-left text-fg-2 hover:bg-[var(--bg-hover)]" onClick={(e) => openProfile(uid, serverId, e.clientX + 12, e.clientY - 20)}>
                 <Avatar path={m?.profile?.avatar_path} name={name} id={uid} size={24} speaking={!!live?.speaking} />
                 <span className="min-w-0 flex-1 truncate">{name}</span>
+                {liveUsers.has(uid) && (
+                  <span role="button" tabIndex={0} className="shrink-0 cursor-pointer rounded bg-[var(--danger)] px-1 text-[10px] leading-4 font-bold text-white" data-tip="Assistir transmissão" onClick={(e) => { e.stopPropagation(); nav(`/app/s/${serverId}/${ch.id}`); if (voiceChannel === ch.id) useVoice.getState().watch(uid); else void joinVoice({ id: ch.id, serverId, name: ch.name }, uid) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.click() }}>AO VIVO</span>
+                )}
                 {m?.voice_deafened && <HeadphoneOff size={14} className="text-[var(--danger-text)]" aria-label="Áudio desativado por um moderador" />}
                 {m?.voice_muted ? <MicOff size={14} className="text-[var(--danger-text)]" aria-label="Silenciado por um moderador" /> : live && !live.micOn && <MicOff size={14} className="text-fg-muted" aria-label="Microfone desligado" />}
                 </button>

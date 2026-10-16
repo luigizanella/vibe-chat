@@ -11,6 +11,8 @@ import type { Scope } from './messages'
 interface Meta {
   status: Presence
   voice: string | null
+  /** Transmitindo a tela agora. */
+  live?: boolean
 }
 
 interface PresenceState {
@@ -54,6 +56,14 @@ export function useVoiceChannelOf(userId: string): string | null {
 }
 
 /** Usuários conectados em cada canal de voz (via presença do servidor). */
+/** Quem está transmitindo a tela (por usuário), segundo a presença do servidor. */
+export function useLiveUsers(): Set<string> {
+  const byTopic = usePresenceStore((s) => s.byTopic)
+  const out = new Set<string>()
+  for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.live && m.voice) out.add(uid)
+  return out
+}
+
 export function useVoiceOccupants(): Record<string, string[]> {
   const byTopic = usePresenceStore((s) => s.byTopic)
   const out: Record<string, Set<string>> = {}
@@ -73,6 +83,7 @@ export function usePresenceManager() {
   const uid = useSession((s) => s.user?.id)
   const profile = useSession((s) => s.profile)
   const voiceChannel = useVoice((s) => s.channelId)
+  const live = useVoice((s) => s.screenOn)
   const { data: servers } = useServers()
   const { data: friends } = useFriends()
   const { data: dms } = useDMs()
@@ -82,7 +93,7 @@ export function usePresenceManager() {
   const pref = profile?.status_pref ?? 'online'
   const myStatus: Presence | null = pref === 'invisible' ? null : pref === 'online' && idle ? 'idle' : pref
   const meta = useRef<Meta | null>(null)
-  meta.current = myStatus ? { status: myStatus, voice: voiceChannel } : null
+  meta.current = myStatus ? { status: myStatus, voice: voiceChannel, live: !!voiceChannel && live } : null
 
   // Detecção de inatividade
   useEffect(() => {
@@ -132,7 +143,7 @@ export function usePresenceManager() {
         const flat: Record<string, Meta> = {}
         for (const [k, metas] of Object.entries(raw)) {
           const best = metas.slice().sort((a, b) => RANK[b.status] - RANK[a.status])[0]
-          if (best) flat[k] = { status: best.status, voice: best.voice ?? null }
+          if (best) flat[k] = { status: best.status, voice: best.voice ?? null, live: !!best.live }
         }
         usePresenceStore.getState().setTopic(topic, flat)
       })
@@ -144,7 +155,7 @@ export function usePresenceManager() {
   }, [uid, wantedKey])
 
   // Atualiza o que eu publico quando status/voz mudam (ou fica invisível)
-  const metaKey = meta.current ? `${meta.current.status}|${meta.current.voice ?? ''}` : 'off'
+  const metaKey = meta.current ? `${meta.current.status}|${meta.current.voice ?? ''}|${meta.current.live ? 1 : 0}` : 'off'
   useEffect(() => {
     for (const { ch, track } of channels.current.values()) {
       if (!track) continue

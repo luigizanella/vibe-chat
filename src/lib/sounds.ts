@@ -1,6 +1,6 @@
 import { useSettings } from '@/store/settings'
 
-export type SoundName = 'message' | 'mention' | 'join' | 'leave' | 'mute' | 'unmute' | 'deafen' | 'undeafen' | 'error'
+export type SoundName = 'message' | 'mention' | 'join' | 'leave' | 'mute' | 'unmute' | 'deafen' | 'undeafen' | 'streamStart' | 'streamStop' | 'streamOther' | 'error'
 
 let ctx: AudioContext | null = null
 
@@ -14,6 +14,9 @@ const PATTERNS: Record<SoundName, [number, number, number][]> = {
   unmute: [[660, 0.1, 0]],
   deafen: [[440, 0.08, 0], [330, 0.1, 0.08]],
   undeafen: [[330, 0.08, 0], [440, 0.1, 0.08]],
+  streamStart: [[392, 0.08, 0], [587, 0.08, 0.08], [784, 0.16, 0.16]],
+  streamStop: [[784, 0.08, 0], [587, 0.08, 0.08], [392, 0.16, 0.16]],
+  streamOther: [[659, 0.07, 0], [659, 0.07, 0.12], [880, 0.14, 0.24]],
   error: [[220, 0.18, 0]],
 }
 
@@ -23,6 +26,8 @@ export function playSound(name: SoundName): void {
   if (!sounds.enabled) return
   if ((name === 'message' && !sounds.message) || (name === 'mention' && !sounds.mention)) return
   if ((name === 'join' || name === 'leave') && !sounds.call) return
+  if (['mute', 'unmute', 'deafen', 'undeafen'].includes(name) && !sounds.voiceState) return
+  if (name.startsWith('stream') && !sounds.stream) return
   try {
     ctx ??= new AudioContext()
     if (ctx.state === 'suspended') void ctx.resume()

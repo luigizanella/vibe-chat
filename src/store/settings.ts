@@ -28,7 +28,7 @@ export interface Settings {
   language: 'pt-BR'
   compact: boolean
   showMembers: boolean
-  sounds: { enabled: boolean; volume: number; message: boolean; mention: boolean; call: boolean }
+  sounds: { enabled: boolean; volume: number; message: boolean; mention: boolean; call: boolean; voiceState: boolean; stream: boolean }
   notifications: { desktop: boolean; mentionsOnly: boolean; muteInCall: boolean; flashTitle: boolean }
   keybinds: { pushToTalk: string; toggleMute: string; toggleDeafen: string; quickSwitcher: string }
   voice: VoiceSettings
@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'pt-BR',
   compact: false,
   showMembers: true,
-  sounds: { enabled: true, volume: 0.5, message: true, mention: true, call: true },
+  sounds: { enabled: true, volume: 0.5, message: true, mention: true, call: true, voiceState: true, stream: true },
   notifications: { desktop: true, mentionsOnly: false, muteInCall: false, flashTitle: true },
   keybinds: { pushToTalk: 'Backquote', toggleMute: 'Ctrl+Shift+M', toggleDeafen: 'Ctrl+Shift+D', quickSwitcher: 'Ctrl+K' },
   voice: {

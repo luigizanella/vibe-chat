@@ -65,7 +65,10 @@ interface VoiceState {
   serverMuted: boolean
   serverDeafened: boolean
   setServerFlags: (muted: boolean, deafened: boolean) => void
-  join: (t: VoiceTarget) => Promise<void>
+  join: (t: VoiceTarget, watch?: string) => Promise<void>
+  /** Quem você está assistindo (transmissão de tela); só essa é baixada. */
+  watching: string | null
+  watch: (identity: string | null) => void
   leave: () => Promise<void>
   retry: () => Promise<void>
   toggleMic: () => Promise<void>
@@ -187,8 +190,11 @@ export const useVoice = create<VoiceState>((set, get) => {
   const sync = (bumpVersion = true) => {
     const room = get().room
     if (!room) return
+    const w = get().watching
+    const snap = snapshot(room)
+    if (w && !snap.some((p) => p.identity === w && p.screenOn)) set({ watching: null })
     set((s) => ({
-      participants: snapshot(room),
+      participants: snap,
       version: bumpVersion ? s.version + 1 : s.version,
       camOn: room.localParticipant.isCameraEnabled,
       screenOn: room.localParticipant.isScreenShareEnabled,
@@ -286,11 +292,25 @@ export const useVoice = create<VoiceState>((set, get) => {
     }
     sync()
   }
+  /** Áudio e câmera sempre; transmissão de tela (e seu áudio) só da pessoa que você escolheu assistir. */
+  const applySubscriptions = () => {
+    const { room, watching } = get()
+    if (!room) return
+    for (const p of room.remoteParticipants.values()) {
+      for (const pub of p.trackPublications.values()) {
+        const isScreen = pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio
+        const want = !isScreen || p.identity === watching
+        if (want !== pub.isSubscribed) pub.setSubscribed(want)
+      }
+    }
+  }
+
   const wire = (room: Room) => {
     const touch = () => sync()
     room
       .on(RoomEvent.ParticipantConnected, () => {
         playSound('join')
+        applySubscriptions()
         sync()
       })
       .on(RoomEvent.ParticipantDisconnected, () => {
@@ -300,11 +320,24 @@ export const useVoice = create<VoiceState>((set, get) => {
       .on(RoomEvent.ActiveSpeakersChanged, () => sync(false))
       .on(RoomEvent.TrackMuted, touch)
       .on(RoomEvent.TrackUnmuted, touch)
-      .on(RoomEvent.TrackPublished, touch)
-      .on(RoomEvent.TrackUnpublished, touch)
-      .on(RoomEvent.LocalTrackPublished, touch)
+      .on(RoomEvent.TrackPublished, (pub) => {
+        if (pub.source === Track.Source.ScreenShare) playSound('streamOther')
+        applySubscriptions()
+        sync()
+      })
+      .on(RoomEvent.TrackUnpublished, (pub) => {
+        if (pub.source === Track.Source.ScreenShare) playSound('streamStop')
+        sync()
+      })
+      .on(RoomEvent.LocalTrackPublished, (pub) => {
+        if (pub.source === Track.Source.ScreenShare) playSound('streamStart')
+        sync()
+      })
       .on(RoomEvent.LocalTrackUnpublished, (pub) => {
-        if (pub.source === Track.Source.ScreenShare) toast.info('Compartilhamento de tela encerrado.')
+        if (pub.source === Track.Source.ScreenShare) {
+          toast.info('Compartilhamento de tela encerrado.')
+          playSound('streamStop')
+        }
         sync()
       })
       .on(RoomEvent.ConnectionQualityChanged, () => sync(false))
@@ -400,7 +433,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     })
     wire(room)
     set({ room, target, channelId: target.id, participants: [] })
-    await room.connect(url, token, { autoSubscribe: true })
+    await room.connect(url, token, { autoSubscribe: false })
+    applySubscriptions()
     return room
   }
 
@@ -424,6 +458,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     micOpen: false,
     micThreshold: 0,
     micChain: null,
+    watching: null,
     serverMuted: false,
     serverDeafened: false,
     setServerFlags: (serverMuted, serverDeafened) => {
@@ -440,13 +475,19 @@ export const useVoice = create<VoiceState>((set, get) => {
       void applyMic()
     },
 
-    join: async (target) => {
+    watch: (identity) => {
+      set({ watching: identity })
+      applySubscriptions()
+      sync()
+    },
+
+    join: async (target, watch) => {
       if (get().channelId === target.id && get().status !== 'failed') return
       if (get().room) await get().leave()
       userLeft = false
       retries = 0
       const s = useSettings.getState().settings.voice
-      set({ status: 'connecting', error: null, target, channelId: target.id, micMuted: s.joinMuted || s.pttEnabled, deafened: false, focus: null })
+      set({ status: 'connecting', error: null, target, channelId: target.id, micMuted: s.joinMuted || s.pttEnabled, deafened: false, focus: null, watching: watch ?? null })
       try {
         const room = await connectRoom(target)
         set({ status: 'connected' })
@@ -474,7 +515,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       stopPing()
       set({ micLevel: 0, micOpen: false })
       const room = get().room
-      set({ room: null, channelId: null, target: null, status: 'idle', error: null, participants: [], camOn: false, screenOn: false, focus: null, pttActive: false })
+      set({ room: null, channelId: null, target: null, status: 'idle', error: null, participants: [], camOn: false, screenOn: false, focus: null, pttActive: false, watching: null })
       if (room) {
         try {
           await room.disconnect()

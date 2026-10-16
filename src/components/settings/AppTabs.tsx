@@ -77,6 +77,8 @@ export function NotificationsTab() {
       <SettingRow title="Nova mensagem"><Toggle checked={s.message} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, message: v } })} label="Som de mensagem" /></SettingRow>
       <SettingRow title="Menção"><Toggle checked={s.mention} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, mention: v } })} label="Som de menção" /></SettingRow>
       <SettingRow title="Entrar/sair de chamada"><Toggle checked={s.call} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, call: v } })} label="Som de chamada" /></SettingRow>
+      <SettingRow title="Mudo, ensurdecer e voltar"><Toggle checked={s.voiceState} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, voiceState: v } })} label="Som de mudo e ensurdecer" /></SettingRow>
+      <SettingRow title="Transmissões de tela" description="Quando você ou alguém começa ou para de transmitir."><Toggle checked={s.stream} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, stream: v } })} label="Som de transmissão" /></SettingRow>
       <div className="field mt-2"><label htmlFor="vol">Volume dos sons: {Math.round(s.volume * 100)}%</label>
         <div className="flex items-center gap-3"><input id="vol" className="flex-1" type="range" min={0} max={1} step={0.05} value={s.volume} onChange={(e) => update({ sounds: { ...s, volume: Number(e.target.value) } })} /><button className="btn btn-sm" onClick={() => playSound('mention')}>Testar</button></div></div>
       <div className="divider" />
