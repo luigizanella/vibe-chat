@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { Headphones, HeadphoneOff, Maximize2, Mic, MicOff, Music, Monitor, MonitorOff, PhoneOff, Pin, PinOff, Signal, Video, VideoOff, Volume2, VolumeX, Loader2, RefreshCw, Settings as SettingsIcon } from 'lucide-react'
 import { Track } from 'livekit-client'
@@ -15,6 +15,7 @@ import { UserSettingsModal } from '@/components/settings/UserSettings'
 import { requestScreenShare } from './ScreenShareModal'
 import { useLocalNick, useUserMenu } from '@/components/userMenu'
 import type { Member } from '@/lib/types'
+import { MAX_TILES, bestGrid } from '@/lib/grid'
 
 interface TileSpec {
   key: string
@@ -60,13 +61,13 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
   return (
     <div
       ref={wrapRef}
-      className={clsx('group relative overflow-hidden rounded-lg bg-[var(--bg-secondary)]', big ? 'h-full w-full' : 'aspect-video w-full', p.speaking && kind === 'camera' && 'outline-2 -outline-offset-2 outline-[var(--success)]')}
+      className={clsx('group relative h-full w-full overflow-hidden rounded-xl bg-[var(--bg-secondary)]', p.speaking && kind === 'camera' && 'outline-[3px] -outline-offset-[3px] outline-[var(--success)]')}
       onDoubleClick={() => void wrapRef.current?.requestFullscreen?.()}
       onContextMenu={(e) => userMenu(p.identity, e)}
     >
       {notWatched ? (
-        <div className="grid h-full w-full place-content-center justify-items-center gap-2 bg-[var(--bg-tertiary)] p-3 text-center">
-          <Avatar path={member?.profile?.avatar_path} name={name} id={p.identity} size={big ? 96 : 48} />
+        <div className="grid h-full w-full place-content-center justify-items-center gap-2 bg-[var(--bg-tertiary)] p-3 pb-9 text-center">
+          <Avatar path={member?.profile?.avatar_path} name={name} id={p.identity} size={big ? 96 : 44} />
           <span className="rounded bg-[var(--danger)] px-1.5 text-[11px] leading-5 font-bold text-white">AO VIVO</span>
           <button className="btn btn-primary btn-sm" onClick={() => watch(p.identity)}><Monitor size={14} /> Assistir transmissão</button>
         </div>
@@ -84,6 +85,7 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
         <button className="truncate border-0 bg-transparent p-0 font-semibold text-inherit hover:underline" onClick={(e) => { e.stopPropagation(); openProfile(p.identity, serverId, e.clientX, e.clientY - 360) }}>{label}{p.isLocal ? ' (você)' : ''}</button>
         {p.quality !== 'unknown' && p.quality !== 'excellent' && <Signal size={12} className={p.quality === 'good' ? 'text-warning' : 'text-danger'} aria-label={`Conexão ${p.quality}`} />}
       </div>
+      {kind === 'screen' && !p.isLocal && !notWatched && <button className="btn btn-sm absolute right-2 bottom-2" onClick={() => watch(null)}><MonitorOff size={13} /> Parar de assistir</button>}
       <div className="absolute top-2 right-2 flex gap-1 rounded-lg bg-black/60 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {!p.isLocal && (
           <div className="flex items-center gap-1 px-1">
@@ -91,7 +93,6 @@ function VideoTile({ spec, big, member, onFocus, focused, serverId }: { spec: Ti
             <input type="range" min={0} max={1} step={0.05} value={volume} onChange={(e) => setVolume(p.identity, Number(e.target.value))} className="w-20" aria-label={`Volume de ${name}`} />
           </div>
         )}
-        {kind === 'screen' && !p.isLocal && !notWatched && <button className="btn btn-sm" onClick={() => watch(null)}><MonitorOff size={13} /> Parar de assistir</button>}
         <button className="icon-btn h-7 w-7 text-white" onClick={onFocus} aria-label={focused ? 'Soltar destaque' : 'Destacar'} data-tip={focused ? 'Soltar destaque' : 'Destacar'}>{focused ? <PinOff size={15} /> : <Pin size={15} />}</button>
         <button className="icon-btn h-7 w-7 text-white" onClick={() => void wrapRef.current?.requestFullscreen?.()} aria-label="Tela cheia" data-tip="Tela cheia"><Maximize2 size={15} /></button>
       </div>
@@ -128,13 +129,42 @@ export function ControlBar({ compact, music }: { compact?: boolean; music?: { en
   )
 }
 
-function gridCols(n: number): string {
-  if (n <= 1) return 'grid-cols-1'
-  if (n <= 4) return 'grid-cols-1 sm:grid-cols-2'
-  if (n <= 9) return 'grid-cols-2 lg:grid-cols-3'
-  return 'grid-cols-2 lg:grid-cols-4'
+export function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setSize({ w: Math.floor(e.contentRect.width), h: Math.floor(e.contentRect.height) }))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, size] as const
 }
 
+const GAP = 8
+
+/** Grade que ocupa toda a área, sem rolagem nem sobreposição (tamanho calculado a partir da área real). */
+export function TileGrid({ items, w, h }: { items: { key: string; node: ReactNode }[]; w: number; h: number }) {
+  const g = bestGrid(items.length, w, h, GAP)
+  return (
+    <div className="flex h-full w-full flex-wrap content-center items-center justify-center" style={{ gap: GAP }}>
+      {items.map((it) => <div key={it.key} style={{ width: g.tw, height: g.th }} className="shrink-0">{it.node}</div>)}
+    </div>
+  )
+}
+
+function MoreTile({ n }: { n: number }) {
+  return <div className="grid h-full w-full place-items-center rounded-xl bg-[var(--bg-secondary)] text-xl font-bold text-fg-2" aria-label={`Mais ${n} pessoas`}>+{n}</div>
+}
+
+/** Prioriza quem transmite, tem câmera ou está falando quando há mais blocos do que cabem. */
+function capTiles(tiles: TileSpec[], max: number): { shown: TileSpec[]; more: number } {
+  if (tiles.length <= max) return { shown: tiles, more: 0 }
+  const rank = (t: TileSpec) => (t.kind === 'screen' ? 4 : 0) + (t.p.camOn ? 2 : 0) + (t.p.speaking ? 2 : 0) + (t.p.isLocal ? 1 : 0)
+  const keep = new Set([...tiles].sort((a, b) => rank(b) - rank(a)).slice(0, max - 1).map((t) => t.key))
+  return { shown: tiles.filter((t) => keep.has(t.key)), more: tiles.length - (max - 1) }
+}
 export function VoiceStage({ channel, serverId }: { channel: { id: string; name: string; server_id: string }; serverId: string }) {
   const { channelId, status, error, participants, focus, setFocus, join, retry, target } = useVoice()
   const meId = useSession((s) => s.user?.id)
@@ -143,6 +173,7 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
   const joined = channelId === channel.id
   const settings = useSettings((s) => s.settings)
   const [showMusic, setShowMusic] = useState(false)
+  const [areaRef, area] = useSize<HTMLDivElement>()
   const botOn = !!members?.some((m) => m.profile?.is_bot)
   const memberOf = (id: string) => members?.find((m) => m.user_id === id)
 
@@ -199,25 +230,39 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
           {(status === 'failed' || status === 'reconnecting') && <button className="btn btn-sm" onClick={() => void retry()}><RefreshCw size={13} /> Tentar agora</button>}
         </div>
       )}
-      <div className="stage-dark min-h-0 flex-1 overflow-y-auto p-3">
+      <div ref={areaRef} className="stage-dark min-h-0 flex-1 overflow-hidden p-2">
         {!participants.length ? (
           <div className="grid h-full place-items-center text-fg-muted"><Loader2 className="spin" /></div>
         ) : spotlight ? (
-          <div className="flex h-full flex-col gap-3 lg:flex-row">
-            <div className="min-h-[200px] min-w-0 flex-1"><VideoTile serverId={serverId} spec={spotlight} big member={memberOf(spotlight.identity)} focused={focus === spotlight.key} onFocus={() => setFocus(focus === spotlight.key ? null : spotlight.key)} /></div>
-            {others.length > 0 && (
-              <div className="flex shrink-0 gap-2 overflow-x-auto lg:w-56 lg:flex-col lg:overflow-y-auto lg:overflow-x-hidden">
-                {others.map((t) => <div key={t.key} className="w-44 shrink-0 lg:w-full"><VideoTile serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} /></div>)}
+          (() => {
+            const side = area.w >= 820
+            const sw = side ? 208 : 176
+            const sh = Math.round(sw * 9 / 16)
+            const cap = side ? Math.max(1, Math.floor((area.h + GAP) / (sh + GAP))) : Math.max(1, Math.floor((area.w + GAP) / (sw + GAP)))
+            const { shown, more } = capTiles(others, cap)
+            return (
+              <div className={clsx('flex h-full w-full', side ? 'flex-row' : 'flex-col')} style={{ gap: GAP }}>
+                <div className="min-h-0 min-w-0 flex-1"><VideoTile serverId={serverId} spec={spotlight} big member={memberOf(spotlight.identity)} focused={focus === spotlight.key} onFocus={() => setFocus(focus === spotlight.key ? null : spotlight.key)} /></div>
+                {others.length > 0 && (
+                  <div className={clsx('flex shrink-0 items-start overflow-hidden', side ? 'flex-col' : 'flex-row justify-center')} style={{ gap: GAP, ...(side ? { width: sw } : { height: sh }) }}>
+                    {shown.map((t) => <div key={t.key} className="shrink-0" style={{ width: sw, height: sh }}><VideoTile serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} /></div>)}
+                    {more > 0 && <div className="shrink-0" style={{ width: sw, height: sh }}><MoreTile n={more} /></div>}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()
         ) : (
-          <div className={clsx('grid h-full auto-rows-fr content-center gap-3', gridCols(tiles.length))}>
-            {tiles.map((t) => <VideoTile key={t.key} serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} />)}
-          </div>
+          (() => {
+            const { shown, more } = capTiles(tiles, MAX_TILES)
+            const items = [
+              ...shown.map((t) => ({ key: t.key, node: <VideoTile serverId={serverId} spec={t} member={memberOf(t.identity)} focused={false} onFocus={() => setFocus(t.key)} /> })),
+              ...(more > 0 ? [{ key: 'more', node: <MoreTile n={more} /> }] : []),
+            ]
+            return <TileGrid items={items} w={area.w} h={area.h} />
+          })()
         )}
-      </div>
-      <div className="flex flex-col items-center gap-2 border-t border-border bg-[var(--bg-secondary)] px-3 py-3">
+      </div>      <div className="flex flex-col items-center gap-2 border-t border-border bg-[var(--bg-secondary)] px-3 py-3">
         <ControlBar music={{ enabled: botOn, open: showMusic, toggle: () => setShowMusic((o) => !o) }} />
         <div className="text-[11px] text-fg-muted">
           {meId && participants.some((p) => p.isLocal && p.screenOn) && <span className="mr-3 text-success">● Você está transmitindo a tela</span>}

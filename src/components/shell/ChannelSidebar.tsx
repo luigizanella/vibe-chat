@@ -59,13 +59,13 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const Icon = ch.kind === 'voice' ? Volume2 : ch.is_private ? Lock : Hash
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className={clsx(mv.overId === ch.id && 'rounded-md bg-[var(--bg-selected)] ring-2 ring-[var(--accent)]')} {...mv.dropProps(ch)}>
-      <div className="group relative" onContextMenu={onContext}>
+      <div className="group relative mb-0.5" onContextMenu={onContext}>
         <button
           {...attributes}
           {...listeners}
           onClick={onOpen}
           aria-current={active ? 'page' : undefined}
-          className={clsx('flex w-full items-center gap-1.5 rounded-md border-0 px-2 py-[5px] text-left', active ? 'bg-[var(--bg-selected)] text-fg' : 'bg-transparent hover:bg-[var(--bg-hover)]', unread && !active && !muted ? 'font-bold text-fg' : muted ? 'text-fg-muted' : 'text-fg-2')}
+          className={clsx('flex w-full items-center gap-1.5 min-h-[34px] rounded-md border-0 px-2.5 py-1.5 text-left', active ? 'bg-[var(--bg-selected)] text-fg' : 'bg-transparent hover:bg-[var(--bg-hover)]', unread && !active && !muted ? 'font-bold text-fg' : muted ? 'text-fg-muted' : 'text-fg-2')}
         >
           <Icon size={18} className="shrink-0 opacity-70" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{ch.name}</span>
@@ -118,7 +118,7 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
 function CategoryHeader({ section, collapsed, canManage, onToggle, onContext, onAdd }: { section: Section; collapsed: boolean; canManage: boolean; onToggle: () => void; onContext: (e: React.MouseEvent) => void; onAdd: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `cat:${section.id}`, data: { type: 'cat' }, disabled: !canManage })
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className="group/cat mt-3 flex items-center pr-1" onContextMenu={onContext}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }} className="group/cat mt-6 mb-1.5 flex items-center pr-1" onContextMenu={onContext}>
       {canManage && <span {...attributes} {...listeners} className="cursor-grab text-fg-muted opacity-0 group-hover/cat:opacity-100" aria-label={`Arrastar categoria ${section.name}`} role="button" tabIndex={0}><GripVertical size={12} /></span>}
       <button className="flex min-w-0 flex-1 items-center gap-0.5 border-0 bg-transparent px-1 text-left text-[13px] font-semibold text-fg-muted hover:text-fg" onClick={onToggle} aria-expanded={!collapsed}>
         {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}<span className="truncate">{section.name}</span>
@@ -260,7 +260,7 @@ export function ChannelSidebar({ serverId }: { serverId: string }) {
         <span className="truncate">{server.name}</span>{menuAnchor ? <X size={16} /> : <ChevronDown size={16} />}
       </button>
       {menuAnchor && <ServerMenu serverId={serverId} anchor={menuAnchor} onClose={() => { menuClosedAt.current = Date.now(); setMenuAnchor(null) }} />}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4" onContextMenu={emptyMenu}>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-4" onContextMenu={emptyMenu}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void onDragEnd(e)}>
           <SortableContext items={sections.filter((s) => s.id).map((s) => `cat:${s.id}`)} strategy={verticalListSortingStrategy}>
             {sections.map((s) => {

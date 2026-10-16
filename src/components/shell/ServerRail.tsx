@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { BellOff, Check, Compass, HelpCircle, LogOut, Plus, Search, Settings, UserPlus } from 'lucide-react'
+import { BellOff, Check, Compass, HelpCircle, LogOut, Plus, Settings, UserPlus } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useUI } from '@/store/ui'
 import { markChannelsRead, setNotifPref, findPref } from '@/data/actions'
@@ -28,8 +28,8 @@ function RailItem({ active, tip, to, onContext, children, indicator, badge }: { 
   )
 }
 
-const railBtn = 'grid h-12 w-12 shrink-0 place-items-center rounded-[24px] border-0 bg-[var(--bg-primary)] text-[var(--success-text)] transition-all duration-150 hover:rounded-[16px] hover:bg-[var(--success)] hover:text-white'
-export function ServerRail({ onSearch, onHelp }: { onSearch: () => void; onHelp: () => void }) {
+const railBtn = 'grid h-14 w-14 shrink-0 place-items-center rounded-[24px] border-0 bg-[var(--bg-primary)] text-[var(--success-text)] transition-all duration-150 hover:rounded-[16px] hover:bg-[var(--success)] hover:text-white'
+export function ServerRail({ onHelp }: { onHelp: () => void }) {
   const { serverId } = useParams()
   const qc = useQueryClient()
   const me = useSession((s) => s.user?.id)
@@ -94,9 +94,9 @@ export function ServerRail({ onSearch, onHelp }: { onSearch: () => void; onHelp:
   const homeActive = !serverId
 
   return (
-    <nav className="flex h-full flex-col items-center gap-2 overflow-y-auto overflow-x-hidden bg-[var(--bg-rail)] py-3" aria-label="Servidores" style={{ scrollbarWidth: 'none' }}>
+    <nav className="flex h-full flex-col items-center gap-3 overflow-y-auto overflow-x-hidden bg-[var(--bg-rail)] py-4" aria-label="Servidores" style={{ scrollbarWidth: 'none' }}>
       <RailItem to="/app/@me" tip="Mensagens diretas" active={homeActive} badge={summary.dmUnread}>
-        <span className={clsx('grid h-12 w-12 place-items-center bg-[var(--bg-primary)] transition-[border-radius,background] duration-150', homeActive ? 'rounded-[16px] bg-[var(--bg-elevated)]' : 'rounded-[24px] group-hover:rounded-[16px] group-hover:bg-[var(--bg-elevated)]')}><img src="/logo.png" alt="Início" draggable={false} className="h-9 w-9 object-contain" /></span>
+        <span className={clsx('grid h-14 w-14 place-items-center bg-[var(--bg-primary)] transition-[border-radius,background] duration-150', homeActive ? 'rounded-[16px] bg-[var(--bg-elevated)]' : 'rounded-[24px] group-hover:rounded-[16px] group-hover:bg-[var(--bg-elevated)]')}><img src="/logo.png" alt="Início" draggable={false} className="h-9 w-9 object-contain" /></span>
       </RailItem>
       <div className="h-0.5 w-8 shrink-0 rounded bg-[var(--border-strong)]" />
       {servers?.map((s) => {
@@ -104,15 +104,14 @@ export function ServerRail({ onSearch, onHelp }: { onSearch: () => void; onHelp:
         const active = s.id === serverId
         return (
           <RailItem key={s.id} to={`/app/s/${s.id}`} tip={s.name} active={active} onContext={serverMenu(s)} indicator={sm?.unread ? 'unread' : 'none'} badge={sm?.mentions}>
-            <Avatar path={s.icon_path} name={s.name} id={s.id} size={48} square className={clsx('[&>span]:transition-[border-radius] [&>span]:duration-150', active ? '[&>span]:!rounded-[16px]' : '[&>span]:!rounded-[24px] group-hover:[&>span]:!rounded-[16px]')} />
+            <Avatar path={s.icon_path} name={s.name} id={s.id} size={56} square className={clsx('[&>span]:transition-[border-radius] [&>span]:duration-150', active ? '[&>span]:!rounded-[16px]' : '[&>span]:!rounded-[24px] group-hover:[&>span]:!rounded-[16px]')} />
           </RailItem>
         )
       })}
       <button className={railBtn} onClick={() => openModal(<CreateServerModal />)} aria-label="Adicionar um servidor" data-tip="Adicionar um servidor" data-tip-side="right"><Plus size={24} /></button>
       <button className={railBtn} onClick={() => openModal(<CreateServerModal initialTab="join" />)} aria-label="Entrar com um convite" data-tip="Entrar com um convite" data-tip-side="right"><Compass size={22} /></button>
       <div className="mt-auto flex flex-col items-center gap-1 pt-2">
-        <button className="icon-btn" onClick={onSearch} aria-label="Busca rápida (Ctrl+K)" data-tip="Busca rápida (Ctrl+K)" data-tip-side="right"><Search size={20} /></button>
-        <button className="icon-btn" onClick={onHelp} aria-label="Ajuda e atalhos" data-tip="Ajuda e atalhos (Ctrl+/)" data-tip-side="right"><HelpCircle size={20} /></button>
+          <button className="icon-btn" onClick={onHelp} aria-label="Ajuda e atalhos" data-tip="Ajuda e atalhos (Ctrl+/)" data-tip-side="right"><HelpCircle size={20} /></button>
       </div>
     </nav>
   )

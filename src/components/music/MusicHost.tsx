@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ExternalLink, GripHorizontal, Minus, Pause, PictureInPicture2, Pin, Play, Plus, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { isTauri } from '@/lib/env'
@@ -183,6 +183,11 @@ function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId
     const h = r?.height ?? 120
     return { x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - w - 8)), y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - h - 8)) }
   }
+  // mantém o player sempre dentro da tela (posição salva de outra janela, expandir/minimizar, redimensionar)
+  useLayoutEffect(() => {
+    if (float && pos) setPos((p) => (p ? clamp(p.x, p.y) : p))
+  }, [minimized, float]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!float) return
     const onResize = () => setPos((p) => (p ? clamp(p.x, p.y) : p))

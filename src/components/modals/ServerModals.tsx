@@ -7,7 +7,8 @@ import { rpc } from '@/lib/supabase'
 import { appOrigin } from '@/lib/env'
 import { errorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/format'
-import { qk, useCategories, useInvites } from '@/data/queries'
+import { qk, useCategories, useInvites, usePermCtx } from '@/data/queries'
+import { hasPerm } from '@/lib/perms'
 import { Modal, Spinner, useAction, useCloseModal, Toggle, confirmAction } from '@/components/ui'
 import { toast } from '@/store/ui'
 import type { Channel } from '@/lib/types'
@@ -97,11 +98,16 @@ export function InviteModal({ serverId, serverName }: { serverId: string; server
   const { data: invites, isLoading } = useInvites(serverId)
   const [expiry, setExpiry] = useState(604800)
   const [uses, setUses] = useState(0)
+  const [slug, setSlug] = useState('')
+  const ctx = usePermCtx(serverId)
+  const canSlug = !!ctx && hasPerm(ctx, 'manage_server')
+  const slugOk = !slug || /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/.test(slug)
   const { busy, run } = useAction()
 
   const create = () =>
     run(async () => {
-      const code = await rpc<string>('create_invite', { p_server: serverId, p_expires_seconds: expiry || null, p_max_uses: uses || null })
+      const code = await rpc<string>('create_invite', { p_server: serverId, p_expires_seconds: expiry || null, p_max_uses: uses || null, p_slug: slug || null })
+      setSlug('')
       await qc.invalidateQueries({ queryKey: qk.invites(serverId) })
       await navigator.clipboard.writeText(inviteLink(code)).catch(() => undefined)
       toast.success('Convite criado e link copiado.')
@@ -117,7 +123,13 @@ export function InviteModal({ serverId, serverName }: { serverId: string; server
         <div className="field"><label htmlFor="inv-uses">Máximo de usos</label>
           <select id="inv-uses" className="select" value={uses} onChange={(e) => setUses(Number(e.target.value))}>{USES.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}</select></div>
       </div>
-      <button className="btn btn-primary mt-3 w-full" disabled={busy} onClick={() => void create()}>{busy ? <Spinner size={14} /> : <Link2 size={16} />} Gerar novo link de convite</button>
+      {canSlug && (
+        <div className="field mt-3"><label htmlFor="inv-slug">Link personalizado (opcional)</label>
+          <div className="flex items-center rounded-md border border-border bg-[var(--bg-input)] pl-3 text-sm text-fg-muted"><span className="shrink-0">{appOrigin().replace(/^https?:\/\//, '')}/invite/</span><input id="inv-slug" className="min-w-0 flex-1 border-0 bg-transparent px-1 py-2 text-fg outline-none" value={slug} maxLength={32} placeholder="meu-servidor" onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} aria-invalid={!slugOk} /></div>
+          {!slugOk && <span className="error-text">Use 3 a 32 letras minúsculas, números ou hífen (sem hífen no começo ou fim).</span>}
+        </div>
+      )}
+      <button className="btn btn-primary mt-3 w-full" disabled={busy || !slugOk} onClick={() => void create()}>{busy ? <Spinner size={14} /> : <Link2 size={16} />} Gerar novo link de convite</button>
 
       <div className="divider" />
       <div className="label mb-2">Convites ativos</div>

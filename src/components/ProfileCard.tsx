@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, MoreHorizontal, Music, SendHorizontal } from 'lucide-react'
+import { Crown, MoreHorizontal, Monitor, MonitorOff, Music, SendHorizontal } from 'lucide-react'
 import { rpc, supabase } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/format'
@@ -11,7 +11,9 @@ import { useSession } from '@/store/session'
 import { qk, useMembers, useProfile, useRoles, useServers } from '@/data/queries'
 import { sendMessage } from '@/data/messages'
 import { MUSIC_HELP, useServerMusic } from '@/data/music'
-import { usePresenceOf } from '@/data/presence'
+import { useLiveUsers, usePresenceOf, voiceChannelOf } from '@/data/presence'
+import { useVoice } from '@/store/voice'
+import type { Channel } from '@/lib/types'
 import { Avatar, PRESENCE_LABEL, Spinner } from '@/components/ui'
 import { useLocalNick, useUserMenu } from '@/components/userMenu'
 import { Layer } from '@/components/Layer'
@@ -44,6 +46,9 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const { data: sessions } = useServerMusic(serverId ?? undefined)
+  const liveUsers = useLiveUsers()
+  const watching = useVoice((s) => s.watching)
+  const myChannel = useVoice((s) => s.channelId)
 
   const { data: mutualIds } = useQuery({
     queryKey: ['mutual', userId],
@@ -105,6 +110,19 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
           </div>
           <div className="text-fg-2">{p.username} · {PRESENCE_LABEL[status]}</div>
           {p.custom_status && <div className="mt-1 text-sm">{p.custom_status}</div>}
+          {(() => {
+            const ch = serverId ? voiceChannelOf(userId, serverId) : null
+            if (!ch || !serverId || !liveUsers.has(userId) || isMe) return null
+            const isWatching = watching === userId && myChannel === ch
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="rounded bg-[var(--danger)] px-1.5 text-[11px] leading-5 font-bold text-white">AO VIVO</span>
+                {isWatching
+                  ? <button className="btn btn-sm" onClick={() => useVoice.getState().watch(null)}><MonitorOff size={14} /> Parar de assistir</button>
+                  : <button className="btn btn-primary btn-sm" onClick={() => { const c = qc.getQueryData<Channel[]>(qk.channels(serverId))?.find((x) => x.id === ch); onClose(); nav(`/app/s/${serverId}/${ch}`); if (myChannel === ch) useVoice.getState().watch(userId); else void useVoice.getState().join({ id: ch, serverId, name: c?.name ?? 'Voz' }, userId) }}><Monitor size={14} /> Assistir tela</button>}
+              </div>
+            )
+          })()}
 
           <div className="my-3 h-px bg-[var(--border)]" />
           {p.is_bot ? (

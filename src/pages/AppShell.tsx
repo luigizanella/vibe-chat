@@ -230,7 +230,7 @@ export function AppShell() {
       <div className="flex min-h-0 flex-1">
         <div className={clsx('flex shrink-0', mobilePane === 'nav' ? 'max-md:w-full' : 'max-md:hidden')}>
           <div className="relative w-[var(--rail-width)] shrink-0">
-            <ServerRail onSearch={() => setQuick(true)} onHelp={() => openModal(<HelpModal />)} />
+            <ServerRail onHelp={() => openModal(<HelpModal />)} />
           </div>
           <div className="w-[var(--sidebar-width)] min-w-0 max-md:flex-1 md:shrink-0">{serverId ? <ChannelSidebar key={serverId} serverId={serverId} /> : <HomeSidebar />}</div>
         </div>

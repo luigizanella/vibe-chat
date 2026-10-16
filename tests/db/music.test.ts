@@ -174,3 +174,25 @@ describe('validação e isolamento', () => {
     expect((await db.admin(`select 1 from music_queue where channel_id=$1`, [ch])).length).toBe(0)
   })
 })
+
+describe('convite com link personalizado', () => {
+  it('só quem gerencia o servidor cria; formato, reservadas e unicidade validados no banco', async () => {
+    const d = await createDb()
+    const [o, m, o2] = await Promise.all(['dono', 'membro', 'outro'].map((n) => d.createUser(n)))
+    const s1 = (await d.as<{ create_server: string }>(o, `select public.create_server('A')`))[0].create_server
+    const s2 = (await d.as<{ create_server: string }>(o2, `select public.create_server('B')`))[0].create_server
+    const code = (await d.as<{ create_invite: string }>(o, `select public.create_invite($1,3600,null)`, [s1]))[0].create_invite
+    await d.as(m, `select public.join_server($1)`, [code])
+    const mk = (u: string, s: string, slug: string) => d.as(u, `select public.create_invite($1,3600,null,$2)`, [s, slug])
+    expect((await mk(o, s1, 'Meu-Servidor'))[0]).toBeTruthy() // normaliza para minúsculas
+    expect(await errorOf(mk(o, s1, 'meu-servidor'))).toMatch(/slug_taken/)
+    expect(await errorOf(mk(o2, s2, 'meu-servidor'))).toMatch(/slug_taken/) // único globalmente
+    expect(await errorOf(mk(o, s1, 'ab'))).toMatch(/invalid_slug/)
+    expect(await errorOf(mk(o, s1, '-abc'))).toMatch(/invalid_slug/)
+    expect(await errorOf(mk(o, s1, 'tem espaço'))).toMatch(/invalid_slug/)
+    expect(await errorOf(mk(o, s1, 'admin'))).toMatch(/reserved_slug/)
+    expect(await errorOf(mk(m, s1, 'do-membro'))).toMatch(/forbidden/) // membro comum não personaliza
+    const joiner = await d.createUser('novo')
+    expect(await d.as<{ join_server: string }>(joiner, `select public.join_server('MEU-SERVIDOR')`)).toHaveLength(1)
+  })
+})
