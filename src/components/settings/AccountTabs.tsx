@@ -180,12 +180,12 @@ export function ProfileTab() {
 /** Linha "rótulo / valor / Editar" da tela de conta. */
 function InfoRow({ label, value, onEdit, action = 'Editar', hint, danger }: { label: string; value?: string; onEdit?: () => void; action?: string; hint?: string; danger?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-5 py-4">
-      <div className="min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4">
+      <div className="min-w-0 shrink-0">
         <div className="text-[13px] font-bold text-fg">{label}</div>
         {hint && <div className="text-xs text-fg-muted">{hint}</div>}
       </div>
-      <div className="flex min-w-0 items-center gap-4">
+      <div className="flex min-w-0 max-w-full items-center gap-4">
         {value && <span className="min-w-0 truncate text-fg-2">{value}</span>}
         {onEdit && <button className={danger ? 'btn btn-danger shrink-0' : 'btn shrink-0'} onClick={onEdit}>{action}</button>}
       </div>
