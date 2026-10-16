@@ -27,8 +27,8 @@ export function AppearanceTab() {
     <div className="mx-auto max-w-3xl">
       <H>Aparência</H>
       <div className="label mb-2">Tema</div>
-      <div className="mb-6 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tema">
-        {([['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']] as const).map(([v, l]) => (
+      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Tema">
+        {([['dark', 'Escuro'], ['light', 'Claro'], ['graphite', 'Grafite'], ['system', 'Sistema']] as const).map(([v, l]) => (
           <button key={v} role="radio" aria-checked={settings.theme === v} onClick={() => update({ theme: v })} className={clsx('rounded-md border p-3 font-semibold', settings.theme === v ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-border bg-secondary')}>{l}</button>
         ))}
       </div>

@@ -81,6 +81,8 @@ async function handleIncoming(qc: QueryClient, row: Message) {
   const isDm = scope.kind === 'dm'
   if ((level === 'mentions' || (settings.notifications.mentionsOnly && !isDm)) && !mentioned && !isDm) return
 
+  // Não perturbar: sem som, sem pop-up e sem título piscando (a mensagem continua chegando e contando como não lida)
+  if (useSession.getState().profile?.status_pref === 'dnd') return
   const inCall = !!useVoice.getState().room
   playSound(mentioned ? 'mention' : 'message')
   if (inCall && settings.notifications.muteInCall) return

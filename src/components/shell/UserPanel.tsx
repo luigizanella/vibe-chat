@@ -8,7 +8,6 @@ import { setCustomStatus, setStatus } from '@/data/actions'
 import { Avatar, Modal, PRESENCE_LABEL, Spinner, useCloseModal } from '@/components/ui'
 import { UserSettingsModal } from '@/components/settings/UserSettings'
 import { requestScreenShare } from '@/components/voice/ScreenShareModal'
-import { usePresenceOf } from '@/data/presence'
 import { errorMessage } from '@/lib/errors'
 import type { Presence, StatusPref } from '@/lib/types'
 import { useServers } from '@/data/queries'
@@ -95,9 +94,9 @@ export function UserPanel() {
   const openMenu = useUI((s) => s.openMenu)
   const openModal = useUI((s) => s.openModal)
   const { room, micMuted, deafened, toggleMic, toggleDeafen } = useVoice()
-  const presence = usePresenceOf(profile?.id)
   if (!profile) return null
-  const shown: Presence = profile.status_pref === 'invisible' ? 'offline' : presence === 'offline' ? (profile.status_pref as Presence) : presence
+  // meu status vem do perfil (fonte da verdade), não da ida e volta da presença
+  const shown: Presence = profile.status_pref === 'invisible' ? 'offline' : (profile.status_pref as Presence)
   const inCall = !!room
 
   const statusMenu = (e: React.MouseEvent) => {

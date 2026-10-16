@@ -22,7 +22,7 @@ export interface VoiceSettings {
 }
 
 export interface Settings {
-  theme: 'dark' | 'light' | 'system'
+  theme: 'dark' | 'light' | 'graphite' | 'system'
   accent: string
   scale: number
   language: 'pt-BR'
@@ -120,8 +120,7 @@ function hexToHsl(hex: string): [number, number, number] {
 
 export function applySettings(s: Settings): void {
   const root = document.documentElement
-  const dark = s.theme === 'system' ? window.matchMedia('(prefers-color-scheme: dark)').matches : s.theme === 'dark'
-  root.dataset.theme = dark ? 'dark' : 'light'
+  root.dataset.theme = s.theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : s.theme
   const [h, sat, l] = hexToHsl(s.accent)
   root.style.setProperty('--accent-h', String(h))
   root.style.setProperty('--accent-s', `${sat}%`)

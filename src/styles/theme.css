@@ -68,9 +68,35 @@
   --z-tooltip: 100;
 }
 
-/* Tema escuro (padrão). Valores escolhidos para contraste AA (testado em tests/unit/contrast.test.ts). */
+/* Tema escuro (padrão): PRETO de verdade, com hierarquia por superfícies bem escuras e bordas sutis.
+   Valores com contraste AA (testado em tests/unit/contrast.test.ts). */
 :root,
 [data-theme='dark'] {
+  color-scheme: dark;
+  --bg-rail: #000000;
+  --bg-tertiary: #111111;
+  --bg-secondary: #0a0a0a;
+  --bg-primary: #000000;
+  --bg-elevated: #161616;
+  --bg-input: #111111;
+  --bg-hover: rgb(255 255 255 / 0.07);
+  --bg-selected: rgb(255 255 255 / 0.12);
+  --bg-mention: hsl(var(--accent-h) var(--accent-s) var(--accent-l) / 0.14);
+  --border: #1f1f1f;
+  --border-strong: #2e2e2e;
+  --text-primary: #f5f5f5;
+  --text-secondary: #c9c9c9;
+  --text-muted: #9c9c9c;
+  --text-link: #8fc1ff;
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.7);
+  --scrim: rgb(0 0 0 / 0.75);
+  --success-text: #57d28f;
+  --danger-text: #ff8587;
+  --warning-text: #f0b232;
+}
+
+/* Tema "Grafite": o cinza anterior (opcional). */
+[data-theme='graphite'] {
   color-scheme: dark;
   --bg-rail: #1e1f22;
   --bg-tertiary: #232428;
@@ -94,44 +120,44 @@
   --warning-text: #f0b232;
 }
 
+/* Tema claro: BRANCO puro com superfícies cinza muito claro. */
 [data-theme='light'] {
   color-scheme: light;
-  --bg-rail: #e3e5e8;
-  --bg-tertiary: #e3e5e8;
-  --bg-secondary: #f2f3f5;
+  --bg-rail: #f4f4f5;
+  --bg-tertiary: #f1f1f2;
+  --bg-secondary: #f8f8f9;
   --bg-primary: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-input: #e3e5e8;
-  --bg-hover: rgb(6 6 7 / 0.06);
-  --bg-selected: rgb(6 6 7 / 0.1);
+  --bg-input: #f1f1f2;
+  --bg-hover: rgb(6 6 7 / 0.05);
+  --bg-selected: rgb(6 6 7 / 0.09);
   --bg-mention: hsl(var(--accent-h) var(--accent-s) var(--accent-l) / 0.1);
-  --border: rgb(6 6 7 / 0.12);
-  --border-strong: rgb(6 6 7 / 0.24);
+  --border: #e4e4e7;
+  --border-strong: #cfcfd4;
   --text-primary: #060607;
   --text-secondary: #404249;
   --text-muted: #5c5f66;
   --text-link: #0a52c2;
-  --shadow: 0 8px 24px rgb(0 0 0 / 0.18);
-  --scrim: rgb(0 0 0 / 0.5);
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  --scrim: rgb(0 0 0 / 0.45);
   --success-text: #1a7f45;
   --danger-text: #c62828;
   --warning-text: #8a5700;
 }
-
 /* Área de chamada: sempre escura (como no Discord), em qualquer tema. Redefine os tokens localmente. */
 .stage-dark {
   color-scheme: dark;
-  --bg-rail: #1e1f22;
-  --bg-tertiary: #232428;
-  --bg-secondary: #2b2d31;
-  --bg-primary: #1a1b1e;
-  --bg-elevated: #383a40;
+  --bg-rail: #000000;
+  --bg-tertiary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-primary: #0a0a0a;
+  --bg-elevated: #1c1c1c;
   --bg-hover: rgb(255 255 255 / 0.08);
   --bg-selected: rgb(255 255 255 / 0.14);
-  --text-primary: #f2f3f5;
-  --text-secondary: #c4c9ce;
-  --text-muted: #a3a6aa;
-  --border: rgb(255 255 255 / 0.1);
+  --text-primary: #f5f5f5;
+  --text-secondary: #c9c9c9;
+  --text-muted: #9c9c9c;
+  --border: #242424;
   background: #000;
   color: var(--text-primary);
 }

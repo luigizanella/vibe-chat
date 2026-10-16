@@ -4,7 +4,7 @@ import { highestRole } from '@/lib/perms'
 import { useReadable } from '@/lib/useReadable'
 import { useMembers, usePermCtx, useRoles } from '@/data/queries'
 import { useVoiceMove } from '@/data/voiceMove'
-import { presenceOfUser, usePresenceStore } from '@/data/presence'
+import { presenceOfUser, useVoiceUsers, usePresenceStore } from '@/data/presence'
 import { useSession } from '@/store/session'
 import { useUI } from '@/store/ui'
 import { Avatar, CenterSpinner } from '@/components/ui'
@@ -21,13 +21,22 @@ export function MemberList({ serverId }: { serverId: string }) {
   const userMenu = useUserMenu(serverId)
   const localNick = useLocalNick()
   const readable = useReadable('secondary')
+  const inVoice = useVoiceUsers()
+  const myPref = useSession((s) => s.profile?.status_pref)
   const mv = useVoiceMove(serverId)
 
   const groups = useMemo(() => {
     if (!members || !roles) return []
-    const status = (m: Member): Presence => (m.user_id === me ? presenceOfUser(byTopic, me) || 'online' : presenceOfUser(byTopic, m.user_id))
+    const status = (m: Member): Presence => {
+      if (m.user_id === me) return myPref === 'invisible' ? 'offline' : ((myPref as Presence) ?? 'online') // meu status vem do perfil (fonte da verdade)
+      const p = presenceOfUser(byTopic, m.user_id)
+      // quem está numa chamada está online (exceto invisível), mesmo que a presença ainda não tenha chegado
+      return p === 'offline' && inVoice.has(m.user_id) && m.profile?.status_pref !== 'invisible' ? 'online' : p
+    }
     const online = members.filter((m) => m.profile?.is_bot || status(m) !== 'offline' || (m.user_id === me && m.profile?.status_pref !== 'invisible'))
     const offline = members.filter((m) => !online.includes(m))
+    const statusMap: Record<string, Presence> = {}
+    for (const m of online) statusMap[m.user_id] = status(m) === 'offline' ? 'online' : status(m)
     const buckets = new Map<string, { role: Role | null; items: Member[] }>()
     for (const m of online) {
       // só cargos com "exibir separadamente" formam grupo; o maior deles define o grupo do membro
@@ -40,10 +49,10 @@ export function MemberList({ serverId }: { serverId: string }) {
     }
     const ordered = [...buckets.values()].sort((a, b) => (b.role?.position ?? -1) - (a.role?.position ?? -1))
     return [
-      ...ordered.map((b) => ({ key: b.role?.id ?? 'online', title: b.role?.name ?? 'Online', items: b.items })),
-      ...(offline.length ? [{ key: 'offline', title: 'Offline', items: offline }] : []),
+      ...ordered.map((b) => ({ key: b.role?.id ?? 'online', title: b.role?.name ?? 'Online', items: b.items, status: statusMap })),
+      ...(offline.length ? [{ key: 'offline', title: 'Offline', items: offline, status: statusMap }] : []),
     ]
-  }, [members, roles, byTopic, me])
+  }, [members, roles, byTopic, me, inVoice, myPref])
 
   if (isLoading || !ctx) return <CenterSpinner />
 
@@ -53,7 +62,7 @@ export function MemberList({ serverId }: { serverId: string }) {
         <section key={g.key} className="mb-4">
           <h3 className="m-0 px-2 pt-1 pb-1.5 text-xs font-bold tracking-wide text-fg-muted uppercase">{g.title} — {g.items.length}</h3>
           {g.items.map((m) => {
-            const st: Presence = g.key === 'offline' ? 'offline' : presenceOfUser(byTopic, m.user_id) === 'offline' ? 'online' : presenceOfUser(byTopic, m.user_id)
+            const st: Presence = g.key === 'offline' ? 'offline' : (g.status[m.user_id] ?? 'online')
             const timedOut = !!m.timeout_until && new Date(m.timeout_until) > new Date()
             const top = roles ? highestRole(roles, m) : undefined
             const name = localNick(m.user_id, m.nickname || m.profile?.display_name || m.profile?.username || 'Membro')

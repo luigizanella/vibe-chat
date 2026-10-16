@@ -53,10 +53,17 @@ const RANK: Record<Presence, number> = { online: 3, dnd: 2, idle: 1, offline: 0 
 
 export function presenceOfUser(byTopic: PresenceState['byTopic'], userId: string | null | undefined): Presence {
   if (!userId) return 'offline'
+  // vale o batimento MAIS RECENTE (quem trocou de status por último), não o status 'mais alto' de um tópico velho
   let best: Presence = 'offline'
+  let bestTs = -1
   for (const t of Object.values(byTopic)) {
     const m = t[userId]
-    if (m && RANK[m.status] > RANK[best]) best = m.status
+    if (!m) continue
+    const ts = m.ts ?? 0
+    if (ts > bestTs || (ts === bestTs && RANK[m.status] > RANK[best])) {
+      best = m.status
+      bestTs = ts
+    }
   }
   return best
 }
@@ -78,18 +85,43 @@ export function useVoiceChannelOf(userId: string): string | null {
 /** Quem está transmitindo a tela (por usuário), segundo a presença do servidor. */
 export function useLiveUsers(): Set<string> {
   const byTopic = usePresenceStore((s) => s.byTopic)
+  useVoice((s) => s.participants) // re-renderiza quando a LiveKit muda
   useTick()
   const out = new Set<string>()
   for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.live && m.voice && fresh(m)) out.add(uid)
+  // na chamada em que estou, o estado REAL da LiveKit (tracks publicados) manda
+  const { status, participants } = useVoice.getState()
+  if (status === 'connected') for (const p of participants) {
+    if (p.screenOn) out.add(p.identity)
+    else out.delete(p.identity)
+  }
   return out
 }
 
 /** Quem está com a câmera ligada numa chamada (presença do servidor). */
 export function useCamUsers(): Set<string> {
   const byTopic = usePresenceStore((s) => s.byTopic)
+  useVoice((s) => s.participants)
   useTick()
   const out = new Set<string>()
   for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.cam && m.voice && fresh(m)) out.add(uid)
+  const { status, participants } = useVoice.getState()
+  if (status === 'connected') for (const p of participants) {
+    if (p.camOn) out.add(p.identity)
+    else out.delete(p.identity)
+  }
+  return out
+}
+
+/** Todos que estão em algum canal de voz (presença recente OU participante conectado na LiveKit). */
+export function useVoiceUsers(): Set<string> {
+  const byTopic = usePresenceStore((s) => s.byTopic)
+  const participants = useVoice((s) => s.participants)
+  const status = useVoice((s) => s.status)
+  useTick()
+  const out = new Set<string>()
+  for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.voice && fresh(m)) out.add(uid)
+  if (status === 'connected') for (const p of participants) out.add(p.identity)
   return out
 }
 
@@ -178,7 +210,7 @@ export function usePresenceManager() {
         const raw = ch.presenceState<Meta>()
         const flat: Record<string, Meta> = {}
         for (const [k, metas] of Object.entries(raw)) {
-          const best = metas.slice().sort((a, b) => RANK[b.status] - RANK[a.status])[0]
+          const best = metas.slice().sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0) || RANK[b.status] - RANK[a.status])[0]
           if (best) flat[k] = { status: best.status, voice: best.voice ?? null, live: !!best.live, cam: !!best.cam, ts: best.ts }
         }
         usePresenceStore.getState().setTopic(topic, flat)

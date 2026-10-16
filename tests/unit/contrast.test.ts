@@ -20,6 +20,7 @@ function block(selectorRe: RegExp): Record<string, string> {
 const root = block(/:root\s*\{/)
 const dark = { ...root, ...block(/:root,\s*\n\[data-theme='dark'\]\s*\{/) }
 const light = { ...root, ...block(/\[data-theme='light'\]\s*\{/) }
+const graphite = { ...root, ...block(/\[data-theme='graphite'\]\s*\{/) }
 const stage = { ...dark, ...block(/\.stage-dark\s*\{/) }
 
 function hex(v: string): [number, number, number] {
@@ -42,6 +43,7 @@ const surfaces = ['bg-rail', 'bg-tertiary', 'bg-secondary', 'bg-primary', 'bg-el
 describe.each([
   ['escuro', dark],
   ['claro', light],
+  ['grafite', graphite],
 ])('contraste AA — tema %s', (_n, t) => {
   it.each(['text-primary', 'text-secondary', 'text-muted'])('%s legível sobre as superfícies', (tok) => {
     for (const s of surfaces) expect(ratio(t[tok], t[s]), `${tok} sobre ${s}`).toBeGreaterThanOrEqual(4.5)

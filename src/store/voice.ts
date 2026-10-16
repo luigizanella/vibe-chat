@@ -357,7 +357,9 @@ export const useVoice = create<VoiceState>((set, get) => {
         sync()
       })
       .on(RoomEvent.TrackUnsubscribed, (track) => {
-        track.detach().forEach((el) => el.remove())
+        // só os <audio> criados por nós saem do DOM; o <video> pertence ao React (remover aqui quebrava o 'assistir de novo')
+        const els = track.detach()
+        if (track.kind === Track.Kind.Audio) els.forEach((el) => el.remove())
         sync()
       })
       .on(RoomEvent.Reconnecting, () => {
