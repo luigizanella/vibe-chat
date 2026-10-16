@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ExternalLink, GripHorizontal, Minus, Pause, PictureInPicture2, Pin, Play, Plus, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
+import { GripHorizontal, Minus, Pause, PictureInPicture2, Pin, Play, Plus, SkipBack, SkipForward, Square, Volume2, VolumeX, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { isTauri } from '@/lib/env'
 import { controlMusic, positionMs, syncClock, useMusic } from '@/data/music'
@@ -7,7 +7,6 @@ import { useMembers } from '@/data/queries'
 import { useSettings } from '@/store/settings'
 import { useVoice } from '@/store/voice'
 import { toast } from '@/store/ui'
-import { watchUrl } from '@/lib/youtube'
 import type { MusicSession } from '@/lib/types'
 
 /* ------------------------------------------------------- YouTube IFrame API */
@@ -274,7 +273,6 @@ function PlayerCard({ channelId, session, mode, onPip, onPipClose }: { channelId
           <button className="icon-btn ml-1 h-8 w-8 shrink-0" aria-label={volume === 0 ? 'Ativar o som da música' : 'Silenciar a música (só para você)'} data-tip={volume === 0 ? 'Ativar som' : 'Silenciar'} aria-pressed={volume === 0} onClick={toggleMute}>{volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}</button>
           {!showMini && <input type="range" min={0} max={100} value={volume} aria-label="Volume da música (só para você)" className="min-w-0 flex-1" onChange={(e) => update({ musicVolume: Number(e.target.value) })} />}
         </div>
-        {!showMini && <a className="mt-1 inline-flex items-center gap-1 text-xs" href={watchUrl(session.video_id ?? '')} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Abrir no YouTube</a>}
       </div>
     </div>
   )

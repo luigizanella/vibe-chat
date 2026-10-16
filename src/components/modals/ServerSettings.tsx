@@ -19,51 +19,84 @@ import { MusicSettings } from './MusicSettings'
 
 type Tab = 'overview' | 'roles' | 'channels' | 'members' | 'invites' | 'moderation' | 'music'
 
-function SettingsFrame({ title, tabs, tab, setTab, children }: { title: string; tabs: { id: string; label: string; icon: ReactNode }[]; tab: string; setTab: (t: never) => void; children: ReactNode }) {
+interface NavEntry { id: string; label: string; icon: ReactNode }
+interface NavGroup { title?: string; items: NavEntry[] }
+
+/** Configurações do servidor em TELA CHEIA: menu à esquerda, conteúdo centralizado, X/ESC no canto. */
+function ServerSettingsFrame({ title, groups, tab, setTab, onDelete, wide, children }: { title: string; groups: NavGroup[]; tab: string; setTab: (t: string) => void; onDelete?: () => void; wide?: boolean; children: ReactNode }) {
   const close = useCloseModal()
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     ref.current?.showModal()
   }, [])
   return (
-    <dialog ref={ref} className="modal" data-size="lg" style={{ maxWidth: 'min(96vw, 900px)', height: 'min(92vh, 680px)' }} onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label={title}>
-      <div className="flex h-full bg-primary text-fg max-sm:flex-col">
-        <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-secondary p-2 sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-3" aria-label={title}>
-          <div className="mb-1 hidden truncate px-2 text-xs font-bold text-fg-muted uppercase sm:block">{title}</div>
-          {tabs.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id as never)} aria-current={tab === t.id} className={clsx('flex shrink-0 items-center gap-2 rounded-md border-0 px-2.5 py-1.5 text-left font-medium', tab === t.id ? 'bg-[var(--bg-selected)] text-fg' : 'bg-transparent text-fg-2 hover:bg-[var(--bg-hover)]')}>
-              {t.icon}{t.label}
-            </button>
-          ))}
+    <dialog ref={ref} className="modal" aria-label={`Configurações de ${title}`} onClose={close} onCancel={(e) => { e.preventDefault(); close() }}
+      style={{ width: '100vw', height: '100dvh', maxWidth: 'none', maxHeight: 'none', borderRadius: 0, border: 0 }}>
+      <div className="flex h-full bg-primary text-fg max-md:flex-col">
+        <nav className="flex shrink-0 flex-col overflow-y-auto border-b border-border bg-secondary p-3 md:w-72 md:border-r md:border-b-0 md:px-4 md:py-8" aria-label="Seções">
+          <div className="mx-auto flex w-full max-w-[250px] flex-col gap-0.5 max-md:max-w-none">
+            {groups.map((g, gi) => (
+              <div key={g.title ?? gi} className={gi > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
+                {g.title && <div className="mb-1 px-2.5 text-xs font-bold text-fg-muted uppercase">{g.title}</div>}
+                {g.items.map((t) => (
+                  <button key={t.id} onClick={() => setTab(t.id)} aria-current={tab === t.id} className={clsx('flex w-full items-center gap-2.5 rounded-md border-0 px-2.5 py-2 text-left font-medium', tab === t.id ? 'bg-[var(--bg-selected)] text-fg' : 'bg-transparent text-fg-2 hover:bg-[var(--bg-hover)]')}>
+                    {t.icon}{t.label}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {onDelete && (
+              <div className="mt-3 border-t border-border pt-3">
+                <button onClick={onDelete} className="flex w-full items-center justify-between gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left font-medium text-[var(--danger-text)] hover:bg-[var(--bg-hover)]">Excluir servidor<Trash2 size={16} /></button>
+              </div>
+            )}
+          </div>
         </nav>
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary p-5 text-fg sm:p-8">
-          <button className="icon-btn absolute top-3 right-3" onClick={close} aria-label="Fechar" data-tip="Fechar (Esc)"><X size={20} /></button>
-          {children}
+        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary px-5 py-8 text-fg md:px-14 md:py-12">
+          <div className="fixed top-6 right-8 z-10 flex flex-col items-center gap-1 max-md:top-3 max-md:right-3">
+            <button className="grid h-9 w-9 place-items-center rounded-full border-2 border-fg-muted bg-transparent text-fg-2 hover:bg-[var(--bg-hover)] hover:text-fg" onClick={close} aria-label="Fechar configurações"><X size={18} /></button>
+            <span className="text-[11px] font-bold text-fg-muted max-md:hidden">ESC</span>
+          </div>
+          <div className={clsx('mx-auto w-full', wide ? 'max-w-6xl' : 'max-w-3xl')}>{children}</div>
         </section>
       </div>
     </dialog>
   )
 }
 
-export { SettingsFrame }
-
 export function ServerSettingsModal({ serverId, initialTab = 'overview' }: { serverId: string; initialTab?: Tab }) {
   const ctx = usePermCtx(serverId)
+  const me = useSession((s) => s.user!.id)
+  const nav = useNavigate()
+  const qc = useQueryClient()
+  const close = useCloseModal()
   const [tab, setTab] = useState<Tab>(initialTab)
   if (!ctx) return <Modal title="Configurações do servidor"><Spinner /></Modal>
   const can = (p: string) => hasPerm(ctx, p)
-  const tabs = [
-    can('manage_server') && { id: 'overview', label: 'Visão geral', icon: <Settings size={16} /> },
-    can('manage_roles') && { id: 'roles', label: 'Cargos', icon: <Shield size={16} /> },
-    can('manage_channels') && { id: 'channels', label: 'Canais', icon: <ListTree size={16} /> },
-    { id: 'members', label: 'Membros', icon: <Users size={16} /> },
-    (can('create_invite') || can('manage_server')) && { id: 'invites', label: 'Convites', icon: <Link2 size={16} /> },
-    (can('ban_members') || can('manage_server')) && { id: 'moderation', label: 'Moderação', icon: <Gavel size={16} /> },
-    can('manage_server') && { id: 'music', label: 'Música', icon: <Music size={16} /> },
-  ].filter(Boolean) as { id: string; label: string; icon: ReactNode }[]
-  const active = tabs.some((t) => t.id === tab) ? tab : (tabs[0].id as Tab)
+  const isOwner = ctx.server.owner_id === me
+  const entry = (ok: boolean, id: Tab, label: string, icon: ReactNode) => (ok ? [{ id, label, icon }] : [])
+  const groups: NavGroup[] = [
+    { title: ctx.server.name, items: [...entry(can('manage_server'), 'overview', 'Visão geral', <Settings size={16} />), ...entry(can('manage_channels'), 'channels', 'Canais', <ListTree size={16} />)] },
+    { title: 'Pessoas', items: [...entry(true, 'members', 'Membros', <Users size={16} />), ...entry(can('manage_roles'), 'roles', 'Cargos', <Shield size={16} />), ...entry(can('create_invite') || can('manage_server'), 'invites', 'Convites', <Link2 size={16} />)] },
+    { title: 'Integrações', items: entry(can('manage_server'), 'music', 'Música', <Music size={16} />) },
+    { title: 'Moderação', items: entry(can('ban_members') || can('manage_server'), 'moderation', 'Banimentos e registro', <Gavel size={16} />) },
+  ].filter((g) => g.items.length)
+  const all = groups.flatMap((g) => g.items)
+  const active = all.some((t) => t.id === tab) ? tab : (all[0].id as Tab)
+  const del = () => confirmAction({
+    title: 'Excluir servidor',
+    message: <>Esta ação é <strong>permanente</strong>. Todas as mensagens e canais de <strong>{ctx.server.name}</strong> serão apagados. Digite o nome do servidor para confirmar.</>,
+    confirmLabel: 'Excluir servidor', danger: true, requireText: ctx.server.name,
+    onConfirm: async () => {
+      await rpc('delete_server', { p_server: ctx.server.id })
+      if (ctx.server.icon_path) void removePublicFile(ctx.server.icon_path)
+      await qc.invalidateQueries({ queryKey: qk.servers })
+      close()
+      nav('/app/@me')
+    },
+  })
   return (
-    <SettingsFrame title={ctx.server.name} tabs={tabs} tab={active} setTab={setTab}>
+    <ServerSettingsFrame title={ctx.server.name} groups={groups} tab={active} setTab={(t) => setTab(t as Tab)} onDelete={isOwner ? del : undefined} wide={active === 'roles'}>
       {active === 'overview' && <Overview ctx={ctx} />}
       {active === 'roles' && <RolesTab ctx={ctx} />}
       {active === 'channels' && <ChannelsTab ctx={ctx} />}
@@ -71,27 +104,20 @@ export function ServerSettingsModal({ serverId, initialTab = 'overview' }: { ser
       {active === 'invites' && <InvitesTab ctx={ctx} />}
       {active === 'moderation' && <ModerationTab ctx={ctx} />}
       {active === 'music' && <MusicSettings ctx={ctx} />}
-    </SettingsFrame>
+    </ServerSettingsFrame>
   )
 }
-
 const H = ({ children }: { children: ReactNode }) => <h2 className="mt-0 mb-5 text-xl font-bold">{children}</h2>
 
 /* ------------------------------------------------------------ visão geral */
 function Overview({ ctx }: { ctx: PermContext }) {
   const qc = useQueryClient()
-  const nav = useNavigate()
-  const close = useCloseModal()
-  const me = useSession((s) => s.user!.id)
   const { server } = ctx
   const [name, setName] = useState(server.name)
   const [icon, setIcon] = useState(server.icon_path)
   const [clear, setClear] = useState(false)
-  const { data: members } = useMembers(server.id)
-  const [heir, setHeir] = useState('')
   const { busy, run } = useAction()
   const file = useRef<HTMLInputElement>(null)
-  const isOwner = server.owner_id === me
   const dirty = name.trim() !== server.name || icon !== server.icon_path
 
   const pick = (f: File | undefined) => {
@@ -129,26 +155,6 @@ function Overview({ ctx }: { ctx: PermContext }) {
       <div className="field mt-5"><label htmlFor="s-name">Nome do servidor</label><input id="s-name" className="input" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} /></div>
       <button className="btn btn-primary mt-4" disabled={busy || !dirty || !name.trim()} onClick={() => void save()}>{busy && <Spinner size={14} />} Salvar alterações</button>
 
-      <div className="divider my-8" />
-      <h3 className="mt-0 text-danger">Zona de perigo</h3>
-      {isOwner ? (
-        <div className="flex flex-col gap-4">
-          <div className="card flex flex-col gap-2">
-            <div className="font-semibold">Transferir propriedade</div>
-            <div className="flex gap-2">
-              <select className="select" value={heir} onChange={(e) => setHeir(e.target.value)} aria-label="Novo dono">
-                <option value="">Escolha um membro…</option>
-                {members?.filter((m) => m.user_id !== me).map((m) => <option key={m.user_id} value={m.user_id}>{m.profile?.display_name || m.profile?.username}</option>)}
-              </select>
-              <button className="btn btn-danger" disabled={!heir} onClick={() => confirmAction({ title: 'Transferir propriedade', message: 'Você deixará de ser o dono deste servidor.', confirmLabel: 'Transferir', danger: true, requireText: server.name, onConfirm: async () => { await rpc('transfer_ownership', { p_server: server.id, p_new_owner: heir }); await qc.invalidateQueries({ queryKey: qk.servers }); close() } })}><Crown size={14} /> Transferir</button>
-            </div>
-          </div>
-          <div className="card flex items-center justify-between gap-3">
-            <div><div className="font-semibold">Excluir servidor</div><div className="text-xs text-fg-muted">Apaga canais, mensagens e cargos permanentemente.</div></div>
-            <button className="btn btn-danger" onClick={() => confirmAction({ title: 'Excluir servidor', message: <>Esta ação é <strong>permanente</strong>. Todas as mensagens e canais de <strong>{server.name}</strong> serão apagados.</>, confirmLabel: 'Excluir servidor', danger: true, requireText: server.name, onConfirm: async () => { await rpc('delete_server', { p_server: server.id }); if (server.icon_path) void removePublicFile(server.icon_path); await qc.invalidateQueries({ queryKey: qk.servers }); close(); nav('/app/@me') } })}><Trash2 size={14} /> Excluir</button>
-          </div>
-        </div>
-      ) : <p className="text-fg-muted">Somente o dono pode excluir ou transferir o servidor.</p>}
     </div>
   )
 }

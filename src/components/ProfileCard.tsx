@@ -18,6 +18,8 @@ import { Avatar, PRESENCE_LABEL, Spinner } from '@/components/ui'
 import { useLocalNick, useUserMenu } from '@/components/userMenu'
 import { Layer } from '@/components/Layer'
 import { Linkified } from '@/components/Linkified'
+import { BOT_ABOUT } from '@/lib/botInfo'
+import { StatusPill } from '@/components/settings/AccountTabs'
 
 /** Cartão de perfil flutuante (camada única, acima de modais e menus abertos antes dele). */
 export function ProfileCardHost() {
@@ -99,8 +101,11 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
         </button>
       </div>
       <div className="relative px-4 pb-4">
-        <div className="-mt-11 mb-2 w-fit rounded-full ring-[6px] ring-[var(--bg-tertiary)]">
-          <Avatar path={p.avatar_path} name={p.display_name || p.username} id={p.id} size={80} status={status} ring="var(--bg-tertiary)" />
+        <div className="-mt-11 mb-2 flex items-end gap-2">
+          <div className="w-fit shrink-0 rounded-full ring-[6px] ring-[var(--bg-tertiary)]">
+            <Avatar path={p.avatar_path} name={p.display_name || p.username} id={p.id} size={80} status={status} ring="var(--bg-tertiary)" />
+          </div>
+          {p.custom_status && <div className="min-w-0 pb-2"><StatusPill text={p.custom_status} /></div>}
         </div>
         <div className="rounded-lg bg-[var(--bg-primary)] p-3">
           <div className="flex items-center gap-1.5 text-xl font-bold">
@@ -109,7 +114,6 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
             {isOwner && <Crown size={16} className="text-warning" aria-label="Dono do servidor" />}
           </div>
           <div className="text-fg-2">{p.username} · {PRESENCE_LABEL[status]}</div>
-          {p.custom_status && <div className="mt-1 text-sm">{p.custom_status}</div>}
           {(() => {
             const ch = serverId ? voiceChannelOf(userId, serverId) : null
             if (!ch || !serverId || !liveUsers.has(userId) || isMe) return null
@@ -128,7 +132,7 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
           {p.is_bot ? (
             <>
               <div className="label mb-1">Sobre</div>
-              <div className="mb-3 text-sm text-fg-2">Toca músicas do YouTube em uma chamada de voz, sincronizadas para todos. Qualquer pessoa na chamada pode usar.</div>
+              <div className="mb-3 text-sm text-fg-2">{BOT_ABOUT}</div>
               <div className="label mb-1">Como usar</div>
               <div className="mb-3 text-sm text-fg-2">{MUSIC_HELP}</div>
               <div className="label mb-1">Comandos do painel</div>

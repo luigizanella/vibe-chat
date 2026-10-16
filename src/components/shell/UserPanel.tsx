@@ -110,21 +110,22 @@ export function UserPanel() {
   }
 
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-1 bg-[var(--bg-rail)] px-2">
-      <button className="flex min-w-0 flex-1 items-center gap-2 rounded-md border-0 bg-transparent p-1 text-left hover:bg-[var(--bg-hover)]" onClick={statusMenu} aria-label={`Seu status: ${PRESENCE_LABEL[shown]}. Alterar`} data-tip="Alterar status" data-tip-side="top" aria-haspopup="menu">
-        <Avatar path={profile.avatar_path} name={profile.display_name || profile.username} id={profile.id} size={32} status={shown} ring="var(--bg-rail)" />
-        <span className="min-w-0 leading-tight">
-          <span className="block truncate text-sm font-semibold">{profile.display_name || profile.username}</span>
-          <span className="block truncate text-[11px] text-fg-muted">{profile.custom_status || PRESENCE_LABEL[shown]}</span>
-        </span>
-      </button>
-      <button className="icon-btn" onClick={() => void toggleMic()} disabled={!inCall} aria-pressed={micMuted} aria-label={micMuted ? 'Ativar microfone' : 'Silenciar microfone'} data-tip={!inCall ? 'Entre em um canal de voz para usar o microfone' : micMuted ? 'Ativar microfone' : 'Silenciar microfone'}>
-        {micMuted && inCall ? <MicOff size={18} className="text-danger" /> : <Mic size={18} />}
-      </button>
-      <button className="icon-btn" onClick={() => void toggleDeafen()} disabled={!inCall} aria-pressed={deafened} aria-label={deafened ? 'Voltar a ouvir' : 'Ensurdecer'} data-tip={!inCall ? 'Entre em um canal de voz' : deafened ? 'Voltar a ouvir' : 'Ensurdecer'}>
-        {deafened ? <HeadphoneOff size={18} className="text-danger" /> : <Headphones size={18} />}
-      </button>
-      <button className="icon-btn" onClick={() => openModal(<UserSettingsModal />)} aria-label="Configurações do usuário" data-tip="Configurações"><Settings size={18} /></button>
-    </div>
-  )
+    <div className="shrink-0 bg-[var(--bg-rail)] p-2">
+      <div className="flex items-center gap-1 rounded-xl border border-border bg-[var(--bg-tertiary)] p-1.5">
+        <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-0 bg-transparent p-1 text-left hover:bg-[var(--bg-hover)]" onClick={statusMenu} aria-label={`Seu status: ${PRESENCE_LABEL[shown]}. Alterar`} data-tip="Alterar status" data-tip-side="top" aria-haspopup="menu">
+          <Avatar path={profile.avatar_path} name={profile.display_name || profile.username} id={profile.id} size={40} status={shown} ring="var(--bg-tertiary)" />
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate text-[15px] font-bold">{profile.display_name || profile.username}</span>
+            <span className="block truncate text-xs text-fg-2">{profile.custom_status || (inCall ? 'Em chamada' : PRESENCE_LABEL[shown])}</span>
+          </span>
+        </button>
+        <button className="icon-btn h-9 w-9" onClick={() => void toggleMic()} disabled={!inCall} aria-pressed={micMuted} aria-label={micMuted ? 'Ativar microfone' : 'Silenciar microfone'} data-tip={!inCall ? 'Entre em um canal de voz para usar o microfone' : micMuted ? 'Ativar microfone' : 'Silenciar microfone'}>
+          {micMuted && inCall ? <MicOff size={20} className="text-danger" /> : <Mic size={20} />}
+        </button>
+        <button className="icon-btn h-9 w-9" onClick={() => void toggleDeafen()} disabled={!inCall} aria-pressed={deafened} aria-label={deafened ? 'Voltar a ouvir' : 'Ensurdecer'} data-tip={!inCall ? 'Entre em um canal de voz' : deafened ? 'Voltar a ouvir' : 'Ensurdecer'}>
+          {deafened ? <HeadphoneOff size={20} className="text-danger" /> : <Headphones size={20} />}
+        </button>
+        <button className="icon-btn h-9 w-9" onClick={() => openModal(<UserSettingsModal />)} aria-label="Configurações do usuário" data-tip="Configurações"><Settings size={20} /></button>
+      </div>
+    </div>  )
 }

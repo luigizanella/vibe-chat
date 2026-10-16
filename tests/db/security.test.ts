@@ -311,10 +311,9 @@ describe('cargos, hierarquia e moderação', () => {
     expect((await db.as(dave, `select * from mod_logs where server_id=$1`, [server])).length).toBeGreaterThan(0)
   })
 
-  it('dono não pode sair; transferência de propriedade só pelo dono para um membro', async () => {
+  it('dono não pode sair; transferência de propriedade não é exposta a clientes', async () => {
     expect(await errorOf(db.as(alice, `select public.leave_server($1)`, [server]))).toMatch(/owner_cannot_leave/)
-    expect(await errorOf(db.as(erin, `select public.transfer_ownership($1,$2)`, [server, erin]))).toMatch(/forbidden/)
-    expect(await errorOf(db.as(alice, `select public.transfer_ownership($1,$2)`, [server, bob]))).toMatch(/invalid_input/)
+    expect(await errorOf(db.as(alice, `select public.transfer_ownership($1,$2)`, [server, bob]))).toMatch(/permission denied/)
   })
 })
 

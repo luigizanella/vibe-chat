@@ -199,7 +199,6 @@ export function AppShell() {
   const loc = useLocation()
   const mobilePane = useUI((s) => s.mobilePane)
   const setMobilePane = useUI((s) => s.setMobilePane)
-  const setQuick = useUI((s) => s.setQuickSwitcher)
   const openModal = useUI((s) => s.openModal)
   const { data: unread } = useUnread()
 

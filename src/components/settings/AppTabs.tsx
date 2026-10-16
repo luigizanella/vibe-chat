@@ -22,7 +22,7 @@ const ACCENTS = ['#6b5bff', '#2f7de1', '#1f8f55', '#c98a00', '#d9531e', '#d63a3d
 export function AppearanceTab() {
   const { settings, update } = useSettings()
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <H>Aparência</H>
       <div className="label mb-2">Tema</div>
       <div className="mb-6 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Tema">
@@ -62,7 +62,7 @@ export function NotificationsTab() {
   }
   const muted = (prefs ?? []).filter((p) => p.muted || p.level !== 'all')
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <H>Notificações</H>
       <SettingRow title="Notificações do sistema" description={perm === 'granted' ? 'Autorizadas. Aparecem quando o app não está em foco.' : perm === 'denied' ? 'Bloqueadas no navegador/sistema. Libere nas configurações do site.' : perm === 'unsupported' ? 'Não suportadas neste ambiente.' : 'Ainda não autorizadas.'}>
         {perm === 'default' ? <button className="btn btn-primary btn-sm" onClick={() => void requestNotificationPermission().then(setPerm)}>Autorizar</button> : <Toggle checked={n.desktop && perm === 'granted'} disabled={perm !== 'granted'} onChange={(v) => update({ notifications: { ...n, desktop: v } })} label="Notificações do sistema" />}
@@ -112,7 +112,7 @@ export function KeybindsTab() {
     ['quickSwitcher', 'Busca rápida', 'Abre a busca global de servidores, canais e pessoas.'],
   ]
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <H>Atalhos de teclado</H>
       {rows.map(([key, title, desc]) => (
         <SettingRow key={key} title={title} description={desc}>
@@ -142,7 +142,7 @@ export function DesktopTab() {
   }, [])
   if (!isTauri)
     return (
-      <div className="max-w-xl"><H>Aplicativo</H>
+      <div className="mx-auto max-w-3xl"><H>Aplicativo</H>
         <p className="card text-fg-2">Estas opções (iniciar com o Windows, minimizar para a bandeja) existem apenas no <strong>aplicativo desktop</strong>. Instale o app Windows para usá-las — veja <code>docs/DESKTOP.md</code>.</p></div>
     )
   const d = settings.desktop
@@ -167,7 +167,7 @@ export function DesktopTab() {
     }
   }
   return (
-    <div className="max-w-xl"><H>Aplicativo</H>
+    <div className="mx-auto max-w-3xl"><H>Aplicativo</H>
       <SettingRow title="Versão" description={`Vibe Chat ${APP_VERSION}`}><button className="btn btn-sm" onClick={() => void checkForUpdate(false)}>Procurar atualização</button></SettingRow>
       <SettingRow title="Iniciar junto com o Windows"><Toggle checked={!!auto} disabled={auto === null} onChange={(v) => void toggleAuto(v)} label="Iniciar com o Windows" /></SettingRow>
       <SettingRow title="Minimizar para a bandeja ao fechar" description="O app continua em segundo plano; use o ícone da bandeja para sair de vez."><Toggle checked={d.closeToTray} onChange={(v) => void setTray(v)} label="Minimizar para a bandeja" /></SettingRow>
@@ -270,7 +270,7 @@ export function SoundsTab() {
   const { settings, update } = useSettings()
   const s = settings.sounds
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <H>Sons</H>
       <SettingRow title="Ativar sons"><Toggle checked={s.enabled} onChange={(v) => update({ sounds: { ...s, enabled: v } })} label="Ativar sons" /></SettingRow>
       <SettingRow title="Nova mensagem"><Toggle checked={s.message} disabled={!s.enabled} onChange={(v) => update({ sounds: { ...s, message: v } })} label="Som de mensagem" /></SettingRow>

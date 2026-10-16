@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { Activity, AppWindow, Ban, Bell, Keyboard, Link2, LogOut, Lock, Mic, Monitor, Palette, Radio, Search, Shield, User, UserCog, Volume2, X } from 'lucide-react'
+import { Activity, AppWindow, Ban, Bell, Keyboard, Link2, LogOut, Mic, Monitor, Palette, Radio, Search, Shield, User, UserCog, Volume2, X } from 'lucide-react'
 import { useSession } from '@/store/session'
 import { Avatar, useCloseModal } from '@/components/ui'
-import { AccountTab, BlockedTab, PrivacyTab, ProfileTab, SecurityTab, SoonTab } from './AccountTabs'
+import { AccountTab, BlockedTab, PrivacyTab, ProfileTab, SoonTab } from './AccountTabs'
 import { AppearanceTab, DesktopTab, DiagnosticsTab, KeybindsTab, NotificationsTab, SoundsTab } from './AppTabs'
 import { VoiceTab } from './VoiceTab'
 
 export type UserTab =
-  | 'profile' | 'account' | 'security' | 'status' | 'connections' | 'privacy' | 'blocked' | 'apps'
+  | 'profile' | 'account' | 'status' | 'connections' | 'privacy' | 'blocked' | 'apps'
   | 'appearance' | 'notifications' | 'keybinds' | 'desktop' | 'voice' | 'sounds' | 'diagnostics'
 
 interface NavItem { id: UserTab; label: string; icon: ReactNode; soon?: boolean }
@@ -20,7 +20,6 @@ const GROUPS: NavGroup[] = [
     items: [
       { id: 'account', label: 'Conta', icon: <UserCog size={16} /> },
       { id: 'profile', label: 'Perfil', icon: <User size={16} /> },
-      { id: 'security', label: 'Senha e segurança', icon: <Lock size={16} /> },
       { id: 'status', label: 'Status e atividade', icon: <Radio size={16} />, soon: true },
       { id: 'connections', label: 'Conexões', icon: <Link2 size={16} />, soon: true },
       { id: 'privacy', label: 'Privacidade', icon: <Shield size={16} /> },
@@ -62,13 +61,12 @@ export function UserSettingsModal({ initialTab = 'account' }: { initialTab?: Use
   const content = (() => {
     switch (tab) {
       case 'profile': return <ProfileTab />
-      case 'account': return <AccountTab />
-      case 'security': return <SecurityTab />
-      case 'status': return <SoonTab title="Status e atividade">Em breve você poderá escolher quem vê o que você está jogando ou ouvindo. Por enquanto, mude o seu status no painel do usuário.</SoonTab>
-      case 'connections': return <SoonTab title="Conexões">Ligação com outras contas (música, jogos) ainda não existe nesta versão.</SoonTab>
+      case 'account': return <AccountTab goto={setTab} />
+      case 'status': return <SoonTab title="Status e atividade" icon={<Radio size={30} />} headline="Mostre o que você está fazendo">Em breve você poderá escolher quem vê o que você está ouvindo ou jogando. Por enquanto, mude seu status e sua frase em Perfil ou no painel do usuário.</SoonTab>
+      case 'connections': return <SoonTab title="Conexões" icon={<Link2 size={30} />} headline="Conecte outras contas">Ligar contas de música e jogos ao seu perfil ainda não existe nesta versão.</SoonTab>
       case 'privacy': return <PrivacyTab />
       case 'blocked': return <BlockedTab />
-      case 'apps': return <SoonTab title="Apps autorizados">Aplicativos de terceiros ainda não podem acessar a sua conta.</SoonTab>
+      case 'apps': return <SoonTab title="Apps autorizados" icon={<AppWindow size={30} />} headline="Nenhum app conectado">Aplicativos de terceiros ainda não podem acessar a sua conta. Quando puderem, você controla tudo por aqui.</SoonTab>
       case 'appearance': return <AppearanceTab />
       case 'notifications': return <NotificationsTab />
       case 'keybinds': return <KeybindsTab />
@@ -80,9 +78,9 @@ export function UserSettingsModal({ initialTab = 'account' }: { initialTab?: Use
   })()
 
   return (
-    <dialog ref={ref} className="modal" data-size="lg" style={{ maxWidth: 'min(96vw, 980px)', height: 'min(92vh, 720px)' }} onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label="Configurações">
+    <dialog ref={ref} className="modal" data-size="lg" style={{ width: 'min(94vw, 1180px)', maxWidth: 'min(94vw, 1180px)', height: 'min(88vh, 820px)' }} onClose={close} onCancel={(e) => { e.preventDefault(); close() }} aria-label="Configurações">
       <div className="flex h-full bg-primary text-fg max-sm:flex-col">
-        <nav className="flex shrink-0 flex-col gap-1 overflow-y-auto border-b border-border bg-secondary p-3 sm:w-64 sm:border-r sm:border-b-0" aria-label="Configurações">
+        <nav className="flex shrink-0 flex-col gap-1 overflow-y-auto border-b border-border bg-secondary p-3 sm:w-72 sm:border-r sm:border-b-0" aria-label="Configurações">
           {profile && (
             <div className="mb-2 flex items-center gap-3 rounded-lg bg-[var(--bg-primary)] p-2.5">
               <Avatar path={profile.avatar_path} name={profile.display_name || profile.username} id={profile.id} size={40} />
@@ -113,7 +111,7 @@ export function UserSettingsModal({ initialTab = 'account' }: { initialTab?: Use
             <LogOut size={16} />Sair
           </button>
         </nav>
-        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary p-5 text-fg sm:p-8" aria-label={current?.label}>
+        <section className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-primary p-5 text-fg sm:px-12 sm:py-10" aria-label={current?.label}>
           <button className="icon-btn absolute top-3 right-3" onClick={close} aria-label="Fechar" data-tip="Fechar (Esc)"><X size={20} /></button>
           {content}
         </section>

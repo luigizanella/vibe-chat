@@ -85,3 +85,7 @@ end $$;
 -- ------------------------------------------------------------------ bot ---
 update public.profiles set custom_status = 'Toque música com a galera'
  where id = '00000000-0000-4000-8000-00000000b075'::uuid;
+
+-- ------------------------------------------------- transferir propriedade ---
+-- A transferência de propriedade foi retirada do produto: a função deixa de ser exposta a clientes.
+revoke execute on function public.transfer_ownership(uuid, uuid) from authenticated, anon, public;

@@ -1,7 +1,7 @@
 /** Converte erros do Supabase/RPC/rede em mensagens compreensíveis (pt-BR). */
 const MAP: [RegExp, string][] = [
   [/rate_limited|too many requests|429/i, 'Muitas ações em pouco tempo. Aguarde alguns segundos e tente novamente.'],
-  [/owner_cannot_leave/, 'O dono não pode sair do servidor. Transfira a propriedade ou exclua o servidor.'],
+  [/owner_cannot_leave/, 'O dono não pode sair do servidor. Se não quiser mais o servidor, exclua-o em Configurações do servidor.'],
   [/banned/, 'Você está banido deste servidor.'],
   [/slug_taken/, 'Este link personalizado já está em uso. Escolha outro.'],
   [/invalid_slug/, 'Link inválido: use 3 a 32 letras minúsculas, números ou hífen (sem começar nem terminar com hífen).'],

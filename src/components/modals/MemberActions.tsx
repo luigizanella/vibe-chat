@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Ban, Crown, LogOut, MessageSquare, Shield, User as UserIcon, UserX } from 'lucide-react'
+import { Ban, LogOut, MessageSquare, Shield, User as UserIcon, UserX } from 'lucide-react'
 import type { NavigateFunction } from 'react-router-dom'
 import { rpc } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { hasPerm, topPosition, type PermContext } from '@/lib/perms'
 import type { Member, Role } from '@/lib/types'
 import { qk } from '@/data/queries'
-import { Avatar, Modal, confirmAction, useCloseModal } from '@/components/ui'
+import { Avatar, Modal, useCloseModal } from '@/components/ui'
 import { toast, useUI, type MenuItem } from '@/store/ui'
 
 export function MemberRolesModal({ serverId, member, roles, ctx }: { serverId: string; member: Member; roles: Role[]; ctx: PermContext }) {
@@ -115,13 +115,6 @@ export function memberMenuItems(opts: {
     mod.push({ label: `Expulsar ${name}`, icon: <UserX size={14} />, danger: true, onClick: () => open(<ReasonModal title={`Expulsar ${name}`} confirmLabel="Expulsar" onConfirm={async (reason) => { await rpc('kick_member', { p_server: sid, p_user: member.user_id, p_reason: reason }); await afterMod(); toast.success('Membro expulso.') }} />) })
   if (hasPerm(ctx, 'ban_members') && outranks)
     mod.push({ label: `Banir ${name}`, icon: <Ban size={14} />, danger: true, onClick: () => open(<ReasonModal title={`Banir ${name}`} confirmLabel="Banir" onConfirm={async (reason) => { await rpc('ban_member', { p_server: sid, p_user: member.user_id, p_reason: reason }); await afterMod(); toast.success('Membro banido.') }} />) })
-  if (ctx.server.owner_id === me && !isSelf)
-    mod.push({
-      label: 'Transferir propriedade',
-      icon: <Crown size={14} />,
-      danger: true,
-      onClick: () => confirmAction({ title: 'Transferir propriedade', message: <>Você tornará <strong>{name}</strong> o novo dono de <strong>{ctx.server.name}</strong>. Você deixará de ser dono e esta ação só pode ser desfeita por ele(a).</>, confirmLabel: 'Transferir', danger: true, requireText: ctx.server.name, onConfirm: async () => { await rpc('transfer_ownership', { p_server: sid, p_new_owner: member.user_id }); await qc.invalidateQueries({ queryKey: qk.servers }); await afterMod() } }),
-    })
   if (!isSelf && opts.onBlock) mod.push({ label: 'Bloquear', icon: <Ban size={14} />, danger: true, onClick: opts.onBlock })
   if (mod.length) items.push({ separator: true }, ...mod)
   return items

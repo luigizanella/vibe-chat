@@ -194,7 +194,7 @@ export function VoiceTab() {
     list.map((d, i) => <option key={d.deviceId || i} value={d.deviceId}>{d.label || `${kind} ${i + 1}`}</option>)
 
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-3xl">
       <H>Voz e vídeo</H>
       <div className="card mb-5">
         <div className="mb-2 font-semibold">Permissões deste {isTauri ? 'aplicativo' : 'site'}</div>
