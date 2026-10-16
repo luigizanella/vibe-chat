@@ -5,6 +5,7 @@ import {
   ConnectionState,
   DisconnectReason,
   LocalAudioTrack,
+  type RemoteAudioTrack,
   Room,
   RoomEvent,
   Track,
@@ -316,6 +317,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     room
       .on(RoomEvent.ParticipantConnected, () => {
         playSound('join')
+        applyVolumes()
         applySubscriptions()
         sync()
       })
@@ -352,6 +354,9 @@ export const useVoice = create<VoiceState>((set, get) => {
           const el = track.attach()
           el.dataset.identity = participant.identity
           container().appendChild(el)
+          // volume SALVO desta pessoa, aplicado direto na faixa (vale também quando ela sai e volta)
+          const { volumes, deafened, serverDeafened } = get()
+          ;(track as RemoteAudioTrack).setVolume(deafened || serverDeafened ? 0 : (volumes[participant.identity] ?? 1))
           applyVolumes()
         }
         sync()

@@ -112,9 +112,12 @@ export function useUserMenu(serverId: string | null) {
       }
 
       // volume: só para quem está na mesma chamada que você
-      const inCall = !!voiceRoom && !isSelf && voiceParticipants.some((p) => p.identity === userId && !p.isLocal)
-      if (inCall) {
+      // o volume fica salvo por pessoa e é reaplicado sempre que ela entra de novo na chamada
+      void voiceRoom
+      void voiceParticipants
+      if (!isSelf) {
         items.push({ separator: true }, { kind: 'slider', label: 'Volume do usuário', value: volumes[userId] ?? 1, min: 0, max: 1, step: 0.01, onChange: (v) => setVolume(userId, v) })
+        if ((volumes[userId] ?? 1) !== 1) items.push({ label: 'Restaurar volume (100%)', icon: <Volume2 size={16} />, onClick: () => setVolume(userId, 1) })
       }
 
       items.push({ separator: true }, {

@@ -18,14 +18,36 @@ export async function attachMiniWindow(channelId: string, getState: () => MiniSt
     resizable: false, visible: false, focus: false, shadow: true,
   })
   const main = getCurrentWindow()
+  let shown = false
+  let busy = false
+  // Única fonte da verdade: a janela principal está em foco? (eventos + checagem periódica, para nunca sobrar uma cópia por cima do app)
+  const apply = async () => {
+    if (busy) return
+    busy = true
+    try {
+      const focused = await main.isFocused().catch(() => true)
+      if (!focused && !shown) {
+        shown = true
+        await mini.show().catch(() => undefined)
+      } else if (focused && shown) {
+        shown = false
+        await mini.hide().catch(() => undefined)
+      }
+    } finally {
+      busy = false
+    }
+  }
   const unlisten = await Promise.all([
     listen('mini-ready', () => void emit('music-state', getState())),
     listen<{ action: 'pause' | 'resume' | 'skip' }>('music-cmd', (e) => void controlMusic(channelId, e.payload.action)),
     listen<{ volume: number }>('music-volume', (e) => useSettings.getState().update({ musicVolume: e.payload.volume })),
-    main.onFocusChanged(({ payload: focused }) => void (focused ? mini.hide() : mini.show()).catch(() => undefined)),
+    main.onFocusChanged(() => void apply()),
   ])
+  const iv = setInterval(() => void apply(), 700)
   return () => {
+    clearInterval(iv)
     unlisten.forEach((f) => f())
+    void mini.hide().catch(() => undefined)
     void mini.close().catch(() => undefined)
   }
 }
