@@ -147,6 +147,7 @@ export function ChannelSidebar({ serverId }: { serverId: string }) {
   const joinVoice = useVoice((s) => s.join)
   const openModal = useUI((s) => s.openModal)
   const openMenu = useUI((s) => s.openMenu)
+  const occupantsByChannel = useVoiceOccupants()
   const setMobilePane = useUI((s) => s.setMobilePane)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -272,7 +273,7 @@ export function ChannelSidebar({ serverId }: { serverId: string }) {
           <SortableContext items={sections.filter((s) => s.id).map((s) => `cat:${s.id}`)} strategy={verticalListSortingStrategy}>
             {sections.map((s) => {
               const isCollapsed = !!s.id && !!collapsed[s.id]
-              const visible = isCollapsed ? s.channels.filter((c) => c.id === channelId || unreadMap.get(c.id)) : s.channels
+              const visible = isCollapsed ? s.channels.filter((c) => c.id === channelId || unreadMap.get(c.id) || (c.kind === 'voice' && (occupantsByChannel[c.id]?.length ?? 0) > 0)) : s.channels
               return (
                 <div key={s.id ?? 'orphans'}>
                   {s.id ? <CategoryHeader section={s} collapsed={isCollapsed} canManage={canManage} onToggle={() => toggle(s.id!)} onContext={categoryMenu(s)} onAdd={() => openModal(<ChannelModal serverId={serverId} defaultCategory={s.id} />)} /> : <div className="h-2" />}
