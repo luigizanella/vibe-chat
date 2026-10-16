@@ -180,7 +180,7 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
     status === 'failed' ? { text: error ?? 'Falha na conexão.', tone: 'err' } : null
 
   return (
-    <div className="stage-dark flex h-full min-h-0">
+    <div className="flex h-full min-h-0 bg-primary">
     <div className="flex min-w-0 flex-1 flex-col">
       {statusBanner && (
         <div className={clsx('flex items-center justify-center gap-3 px-4 py-2 text-sm', statusBanner.tone === 'err' ? 'bg-[var(--danger)] text-white' : statusBanner.tone === 'warn' ? 'bg-warning text-black' : 'bg-[var(--accent)] text-white')} role="status">
@@ -188,7 +188,7 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
           {(status === 'failed' || status === 'reconnecting') && <button className="btn btn-sm" onClick={() => void retry()}><RefreshCw size={13} /> Tentar agora</button>}
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="stage-dark min-h-0 flex-1 overflow-y-auto p-3">
         {!participants.length ? (
           <div className="grid h-full place-items-center text-fg-muted"><Loader2 className="spin" /></div>
         ) : spotlight ? (
@@ -206,7 +206,7 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
           </div>
         )}
       </div>
-      <div className="flex flex-col items-center gap-2 border-t border-[var(--border)] bg-[var(--bg-rail)] px-3 py-3">
+      <div className="flex flex-col items-center gap-2 border-t border-border bg-[var(--bg-secondary)] px-3 py-3">
         <ControlBar music={{ enabled: botOn, open: showMusic, toggle: () => setShowMusic((o) => !o) }} />
         <div className="text-[11px] text-fg-muted">
           {meId && participants.some((p) => p.isLocal && p.screenOn) && <span className="mr-3 text-success">● Você está transmitindo a tela</span>}

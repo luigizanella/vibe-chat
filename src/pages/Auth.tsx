@@ -17,7 +17,7 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
     >
       <div className="w-full max-w-[440px] rounded-xl border border-border bg-primary p-6 shadow-[var(--shadow)] sm:p-8" style={{ animation: 'pop-in var(--dur) var(--ease)' }}>
         <div className="mb-5 flex flex-col items-center text-center">
-          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-16 w-16 rounded-2xl" draggable={false} />
+          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-20 w-20 object-contain" draggable={false} />
           <h1 className="m-0 text-2xl font-bold">{title}</h1>
           {subtitle && <p className="mt-1 mb-0 text-fg-2">{subtitle}</p>}
         </div>

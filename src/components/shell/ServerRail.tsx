@@ -96,7 +96,7 @@ export function ServerRail({ onSearch, onHelp }: { onSearch: () => void; onHelp:
   return (
     <nav className="flex h-full flex-col items-center gap-2 overflow-y-auto overflow-x-hidden bg-[var(--bg-rail)] py-3" aria-label="Servidores" style={{ scrollbarWidth: 'none' }}>
       <RailItem to="/app/@me" tip="Mensagens diretas" active={homeActive} badge={summary.dmUnread}>
-        <img src="/logo.png" alt="Início" draggable={false} className={clsx('h-12 w-12 object-cover transition-[border-radius] duration-150', homeActive ? 'rounded-[16px]' : 'rounded-[24px] group-hover:rounded-[16px]')} />
+        <span className={clsx('grid h-12 w-12 place-items-center bg-[var(--bg-primary)] transition-[border-radius,background] duration-150', homeActive ? 'rounded-[16px] bg-[var(--bg-elevated)]' : 'rounded-[24px] group-hover:rounded-[16px] group-hover:bg-[var(--bg-elevated)]')}><img src="/logo.png" alt="Início" draggable={false} className="h-9 w-9 object-contain" /></span>
       </RailItem>
       <div className="h-0.5 w-8 shrink-0 rounded bg-[var(--border-strong)]" />
       {servers?.map((s) => {

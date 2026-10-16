@@ -28,7 +28,7 @@ export function DownloadPage() {
     <main className="min-h-full overflow-y-auto p-4" style={{ background: 'radial-gradient(1200px 600px at 20% -10%, var(--accent-soft), transparent), var(--bg-tertiary)' }}>
       <div className="mx-auto my-8 w-full max-w-xl rounded-xl border border-border bg-primary p-6 shadow-[var(--shadow)] sm:p-8">
         <div className="mb-5 flex flex-col items-center text-center">
-          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-16 w-16 rounded-2xl" draggable={false} />
+          <img src="/logo.png" alt="Vibe Chat" className="mb-3 h-20 w-20 object-contain" draggable={false} />
           <h1 className="m-0 text-2xl font-bold">Vibe Chat</h1>
           <p className="mt-1 mb-0 text-fg-2">Escolha como quer usar.</p>
         </div>

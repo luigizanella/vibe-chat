@@ -52,7 +52,7 @@ export function VoiceDock() {
           <Signal size={20} aria-hidden />
         </span>
         <button className="min-w-0 flex-1 border-0 bg-transparent p-0 text-left" onClick={() => nav(`/app/s/${target.serverId}/${target.id}`)} aria-label={`Voltar para a chamada ${target.name}`} data-tip="Voltar para a chamada" data-tip-side="top">
-          <div className={`text-sm font-bold ${color}`}>{label}{status === 'connected' && ping !== null ? ` · ${ping} ms` : ''}{status === 'connected' && quality !== 'unknown' && quality !== 'excellent' ? ` · ${quality === 'good' ? 'boa' : quality === 'poor' ? 'instável' : 'perdida'}` : ''}</div>
+          <div className={`flex items-baseline gap-1 text-sm font-bold whitespace-nowrap ${color}`} title={status === 'connected' && quality !== 'unknown' ? `Qualidade da conexão: ${quality === 'excellent' ? 'ótima' : quality === 'good' ? 'boa' : quality === 'poor' ? 'instável' : 'perdida'}` : undefined}><span className="min-w-0 truncate">{label}</span>{status === 'connected' && ping !== null && <span className="shrink-0 text-right font-semibold tabular-nums">· {ping} ms</span>}</div>
           <div className="truncate text-xs text-fg-2 hover:underline">{target.name} / {servers?.find((s) => s.id === target.serverId)?.name}</div>
         </button>
         {status === 'failed' && <button className="btn btn-sm" onClick={() => void retry()}>Tentar</button>}
