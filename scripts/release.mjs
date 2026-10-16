@@ -41,7 +41,7 @@ console.log('Enviado. O site (Vercel) atualiza sozinho em ~1 min.')
 // Eventos de tag nem sempre disparam o Actions neste repositório: dispara o workflow explicitamente.
 const token = (readFileSync('.tokens.env', 'utf8').match(/^GITHUB_TOKEN=(.+)$/m) ?? [])[1]?.trim()
 if (token) {
-  const res = await fetch('https://api.github.com/repos/luigizanella/vibe-chat/actions/workflows/release.yml/dispatches', {
+  const res = await fetch('https://api.github.com/repos/luigizanella/vibe-chat/actions/workflows/release-desktop.yml/dispatches', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
     body: JSON.stringify({ ref: tag }),
