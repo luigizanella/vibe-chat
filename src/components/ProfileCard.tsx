@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Crown, MoreHorizontal, Monitor, MonitorOff, Music, SendHorizontal } from 'lucide-react'
+import { Crown, MoreHorizontal, Monitor, MonitorOff, Music, SendHorizontal, Video, VideoOff } from 'lucide-react'
 import { rpc, supabase } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/format'
@@ -11,7 +11,7 @@ import { useSession } from '@/store/session'
 import { qk, useMembers, useProfile, useRoles, useServers } from '@/data/queries'
 import { sendMessage } from '@/data/messages'
 import { MUSIC_HELP, useServerMusic } from '@/data/music'
-import { useLiveUsers, usePresenceOf, voiceChannelOf } from '@/data/presence'
+import { useCamUsers, useLiveUsers, usePresenceOf, voiceChannelOf } from '@/data/presence'
 import { useVoice } from '@/store/voice'
 import type { Channel } from '@/lib/types'
 import { Avatar, PRESENCE_LABEL, Spinner } from '@/components/ui'
@@ -49,6 +49,8 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
   const [busy, setBusy] = useState(false)
   const { data: sessions } = useServerMusic(serverId ?? undefined)
   const liveUsers = useLiveUsers()
+  const camUsers = useCamUsers()
+  const focus = useVoice((s) => s.focus)
   const watching = useVoice((s) => s.watching)
   const myChannel = useVoice((s) => s.channelId)
 
@@ -116,18 +118,33 @@ function CardBody({ userId, serverId, onClose }: { userId: string; serverId: str
           <div className="text-fg-2">{p.username} · {PRESENCE_LABEL[status]}</div>
           {(() => {
             const ch = serverId ? voiceChannelOf(userId, serverId) : null
-            if (!ch || !serverId || !liveUsers.has(userId) || isMe) return null
-            const isWatching = watching === userId && myChannel === ch
+            const isLive = liveUsers.has(userId)
+            const hasCam = camUsers.has(userId)
+            if (!ch || !serverId || isMe || (!isLive && !hasCam)) return null
+            const goto = (after: (uid: string) => void) => {
+              const c = qc.getQueryData<Channel[]>(qk.channels(serverId))?.find((x) => x.id === ch)
+              onClose()
+              nav(`/app/s/${serverId}/${ch}`)
+              if (myChannel === ch) after(userId)
+              else void useVoice.getState().join({ id: ch, serverId, name: c?.name ?? 'Voz' }, isLive ? userId : undefined).then(() => after(userId))
+            }
+            const camKey = `${userId}:cam`
             return (
-              <div className="mt-2 flex items-center gap-2">
-                <span className="rounded bg-[var(--danger)] px-1.5 text-[11px] leading-5 font-bold text-white">AO VIVO</span>
-                {isWatching
-                  ? <button className="btn btn-sm" onClick={() => useVoice.getState().watch(null)}><MonitorOff size={14} /> Parar de assistir</button>
-                  : <button className="btn btn-primary btn-sm" onClick={() => { const c = qc.getQueryData<Channel[]>(qk.channels(serverId))?.find((x) => x.id === ch); onClose(); nav(`/app/s/${serverId}/${ch}`); if (myChannel === ch) useVoice.getState().watch(userId); else void useVoice.getState().join({ id: ch, serverId, name: c?.name ?? 'Voz' }, userId) }}><Monitor size={14} /> Assistir tela</button>}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {isLive && (
+                  <>
+                    <span className="rounded bg-[var(--danger)] px-1.5 text-[11px] leading-5 font-bold text-white">AO VIVO</span>
+                    {watching === userId && myChannel === ch
+                      ? <button className="btn btn-sm" onClick={() => useVoice.getState().watch(null)}><MonitorOff size={14} /> Parar de assistir</button>
+                      : <button className="btn btn-primary btn-sm" onClick={() => goto((u) => useVoice.getState().watch(u))}><Monitor size={14} /> Assistir tela</button>}
+                  </>
+                )}
+                {hasCam && (focus === camKey && myChannel === ch
+                  ? <button className="btn btn-sm" onClick={() => useVoice.getState().setFocus(null)}><VideoOff size={14} /> Parar de assistir</button>
+                  : <button className="btn btn-sm" onClick={() => goto(() => useVoice.getState().setFocus(camKey))}><Video size={14} /> Ver câmera</button>)}
               </div>
             )
           })()}
-
           <div className="my-3 h-px bg-[var(--border)]" />
           {p.is_bot ? (
             <>

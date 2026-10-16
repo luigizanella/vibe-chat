@@ -1,4 +1,5 @@
 import { isTauri } from './env'
+import { isMac, isSafari } from './diag'
 import { toast, useUI } from '@/store/ui'
 import { Modal, useCloseModal } from '@/components/ui'
 
@@ -30,6 +31,13 @@ function windowsPrivacyPage(kind: MediaKind): string {
 /** Passos para liberar a permissão, de acordo com onde o app está rodando. */
 export function permissionSteps(kind: MediaKind): string[] {
   if (kind === 'screen') {
+    if (isMac())
+      return [
+        'Abra o menu Apple, Ajustes do Sistema, Privacidade e Segurança, Gravação de Tela (em versões antigas: Preferências do Sistema, Segurança e Privacidade, Privacidade, Gravação de Tela).',
+        `Ligue a chave de ${isSafari() ? 'Safari' : 'seu navegador (Chrome, Edge, Arc…)'}. Se ele não estiver na lista, volte ao app e tente compartilhar uma vez para ele aparecer.`,
+        'Reinicie o navegador por completo (Cmd+Q) e abra o Vibe Chat de novo.',
+        isSafari() ? 'No Safari, clique no botão de compartilhar de novo logo depois de abrir a chamada; ele só abre o seletor em resposta direta a um clique.' : 'Depois de reiniciar, clique em Tela e escolha a tela, janela ou aba.',
+      ]
     return isTauri
       ? ['Clique em “Tela” de novo e, na janela do Windows, escolha a tela ou janela e confirme em “Compartilhar”.', 'Se a janela do Windows não aparecer, feche o Vibe Chat pelo ícone da bandeja (botão direito → Sair) e abra de novo.']
       : ['Clique em “Tela” de novo e escolha a tela, janela ou aba no seletor do navegador, depois “Compartilhar”.', 'Se o seletor não aparece, clique no cadeado ao lado do endereço → Configurações do site → permita “Compartilhamento de tela”, e recarregue a página (F5).']
@@ -54,8 +62,9 @@ export function permissionSteps(kind: MediaKind): string[] {
 function HelpModal({ kind, problem }: { kind: MediaKind; problem: MediaProblem }) {
   const close = useCloseModal()
   const { nome } = LABEL[kind]
+  const steps = permissionSteps(kind)
   const title =
-    problem === 'busy' ? `Não foi possível usar ${LABEL[kind].artigo} ${nome}` : `Permissão negada para ${LABEL[kind].artigo} ${nome}`
+    kind === 'screen' ? 'Não foi possível compartilhar a tela' : problem === 'busy' ? `Não foi possível usar ${LABEL[kind].artigo} ${nome}` : `Permissão negada para ${LABEL[kind].artigo} ${nome}`
   return (
     <Modal title={title} footer={<button className="btn btn-primary" onClick={close}>Entendi</button>}>
       <p className="mt-0 text-fg-2">
@@ -65,9 +74,10 @@ function HelpModal({ kind, problem }: { kind: MediaKind; problem: MediaProblem }
       </p>
       {problem !== 'busy' && (
         <ol className="m-0 flex list-decimal flex-col gap-2 pl-5 text-fg-2">
-          {permissionSteps(kind).map((s) => <li key={s}>{s}</li>)}
+          {steps.map((s) => <li key={s}>{s}</li>)}
         </ol>
       )}
+      {problem !== 'busy' && <button className="btn btn-sm mt-3" onClick={() => void navigator.clipboard.writeText(steps.map((s, i) => `${i + 1}. ${s}`).join('\n')).then(() => toast.success('Passo a passo copiado.'))}>Copiar passo a passo</button>}
       <p className="hint mt-4">Você continua na chamada e pode ouvir os outros. Nada é capturado sem a sua permissão.</p>
     </Modal>
   )
@@ -83,8 +93,18 @@ export function reportMediaError(e: unknown, kind: MediaKind): MediaProblem {
   if (now - lastShown < 1500) return problem // evita modais/toasts duplicados em sequência
   lastShown = now
   if (kind === 'screen' && (problem === 'denied' || problem === 'cancelled')) {
+    // resposta instantânea = o seletor nem chegou a abrir (permissão do sistema ou gesto perdido); demorada = a pessoa cancelou
+    const ms = (e as { ms?: number })?.ms
+    if (ms !== undefined && ms < 700) {
+      useUI.getState().openModal(<HelpModal kind="screen" problem="denied" />)
+      return 'denied'
+    }
     toast.info('Compartilhamento de tela cancelado.')
     return 'cancelled'
+  }
+  if (kind === 'screen' && problem === 'unsupported') {
+    toast.error('Este navegador não consegue compartilhar a tela. Use o Chrome ou o Edge.')
+    return problem
   }
   if (problem === 'denied' || problem === 'busy') useUI.getState().openModal(<HelpModal kind={kind} problem={problem} />)
   else if (problem === 'notfound') toast.error(`Nenhum${kind === 'camera' || kind === 'speaker' ? 'a' : ''} ${nome} encontrad${kind === 'camera' || kind === 'speaker' ? 'a' : 'o'}. Conecte um dispositivo e escolha-o em Configurações → Voz e vídeo.`)

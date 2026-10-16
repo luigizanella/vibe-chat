@@ -4,7 +4,8 @@ import { Monitor } from 'lucide-react'
 import { Modal, Toggle, useCloseModal } from '@/components/ui'
 import { useSettings } from '@/store/settings'
 import { useVoice } from '@/store/voice'
-import { screenPreset } from '@/lib/screen'
+import { acquireScreenStream, screenPreset } from '@/lib/screen'
+import { isMac, isSafari } from '@/lib/diag'
 import { useUI } from '@/store/ui'
 
 function Choice<T extends string | number>({ label, value, options, onChange }: { label: string; value: T; options: { v: T; l: string; hint?: string }[]; onChange: (v: T) => void }) {
@@ -35,10 +36,12 @@ function ScreenShareModal() {
   const mbps = (p.maxBitrate / 1_000_000).toFixed(1)
 
   const start = () => {
+    // 1) PRIMEIRO pede a captura, direto do clique (o Safari exige o gesto do usuário e não tolera etapas antes)
+    const pending = acquireScreenStream(q, fps, audio)
+    pending.catch(() => undefined) // o erro é tratado em toggleScreen
     updateVoice({ screenQuality: q, screenFps: fps, screenAudio: audio })
     close()
-    // ainda dentro do gesto do usuário (clique): o navegador exige isso para abrir o seletor de tela
-    void toggleScreen()
+    void toggleScreen(pending)
   }
 
   return (
@@ -57,6 +60,11 @@ function ScreenShareModal() {
           </div>
           <Toggle checked={audio} onChange={setAudio} label="Compartilhar áudio do sistema" />
         </div>
+        {isMac() && (
+          <div className="rounded-md border border-border bg-secondary p-3 text-sm text-fg-2">
+            <strong className="text-fg">No Mac:</strong> se o seletor não abrir ou a imagem ficar preta, libere o navegador em Ajustes do Sistema, Privacidade e Segurança, Gravação de Tela, e reinicie o navegador.{isSafari() && ' O Safari não compartilha o áudio do sistema.'}
+          </div>
+        )}
         <p className="hint m-0">Até {mbps} Mbps por espectador. {q === '1080p' && fps === 60 ? 'A combinação 1080p/60 usa muita banda: o plano grátis do LiveKit inclui 50 GB/mês no total.' : 'O app reduz a qualidade sozinho se a conexão de alguém não aguentar.'}</p>
       </div>
     </Modal>

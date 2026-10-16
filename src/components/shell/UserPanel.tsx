@@ -70,7 +70,7 @@ function QuickControls() {
     <div className="mt-2">
       <div className="flex gap-1">
         <button className={`btn btn-sm flex-1 ${camOn ? 'btn-primary' : ''}`} onClick={() => void toggleCamera()} aria-pressed={camOn}><Video size={14} /> Vídeo</button>
-        <button className={`btn btn-sm flex-1 ${screenOn ? 'btn-primary' : ''}`} onClick={requestScreenShare} aria-pressed={screenOn}><Monitor size={14} /> {screenOn ? 'Parar' : 'Tela'}</button>
+        <button className={`btn btn-sm flex-1 ${screenOn ? 'btn-primary' : ''}`} onClick={requestScreenShare} aria-pressed={screenOn} disabled={typeof navigator.mediaDevices?.getDisplayMedia !== 'function'} title={typeof navigator.mediaDevices?.getDisplayMedia !== 'function' ? 'Este navegador não permite compartilhar a tela' : undefined}><Monitor size={14} /> {screenOn ? 'Parar' : 'Tela'}</button>
       </div>
       {screenOn && <div className="mt-1 text-xs font-semibold text-[var(--danger-text)]" role="status">● Você está transmitindo a tela</div>}
       <div className="mt-2">

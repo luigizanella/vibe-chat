@@ -13,6 +13,24 @@ interface Meta {
   voice: string | null
   /** Transmitindo a tela agora. */
   live?: boolean
+  /** Câmera ligada agora. */
+  cam?: boolean
+  /** Último batimento (ms). Presença de voz sem batimento recente é ignorada (evita fantasmas). */
+  ts?: number
+}
+
+const STALE_MS = 75_000
+const HEARTBEAT_MS = 15_000
+/** Presença de voz vencida (quem fechou a aba sem sair e o servidor ainda não notou). */
+const fresh = (m: Meta | undefined, now = Date.now()) => !!m && (!m.voice || !m.ts || now - m.ts < STALE_MS)
+
+/** Re-renderiza periodicamente para que presenças vencidas sumam sozinhas. */
+function useTick(ms = 10_000) {
+  const [, set] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => set((n) => n + 1), ms)
+    return () => clearInterval(iv)
+  }, [ms])
 }
 
 interface PresenceState {
@@ -49,8 +67,9 @@ export function usePresenceOf(userId: string | null | undefined): Presence {
 }
 
 export function useVoiceChannelOf(userId: string): string | null {
+  useTick()
   return usePresenceStore((s) => {
-    for (const t of Object.values(s.byTopic)) if (t[userId]?.voice) return t[userId].voice
+    for (const t of Object.values(s.byTopic)) if (t[userId]?.voice && fresh(t[userId])) return t[userId].voice
     return null
   })
 }
@@ -59,20 +78,36 @@ export function useVoiceChannelOf(userId: string): string | null {
 /** Quem está transmitindo a tela (por usuário), segundo a presença do servidor. */
 export function useLiveUsers(): Set<string> {
   const byTopic = usePresenceStore((s) => s.byTopic)
+  useTick()
   const out = new Set<string>()
-  for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.live && m.voice) out.add(uid)
+  for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.live && m.voice && fresh(m)) out.add(uid)
+  return out
+}
+
+/** Quem está com a câmera ligada numa chamada (presença do servidor). */
+export function useCamUsers(): Set<string> {
+  const byTopic = usePresenceStore((s) => s.byTopic)
+  useTick()
+  const out = new Set<string>()
+  for (const topic of Object.keys(byTopic)) if (topic.startsWith('srv:')) for (const [uid, m] of Object.entries(byTopic[topic])) if (m.cam && m.voice && fresh(m)) out.add(uid)
   return out
 }
 
 export function useVoiceOccupants(): Record<string, string[]> {
   const byTopic = usePresenceStore((s) => s.byTopic)
+  const myChannel = useVoice((s) => s.channelId)
+  const participants = useVoice((s) => s.participants)
+  const status = useVoice((s) => s.status)
+  useTick()
   const out: Record<string, Set<string>> = {}
   for (const topic of Object.keys(byTopic)) {
     if (!topic.startsWith('srv:')) continue
     for (const [uid, m] of Object.entries(byTopic[topic])) {
-      if (m.voice) (out[m.voice] ??= new Set()).add(uid)
+      if (m.voice && fresh(m)) (out[m.voice] ??= new Set()).add(uid)
     }
   }
+  // no canal em que EU estou, a LiveKit é a fonte da verdade (entra e sai na hora, sem depender da presença)
+  if (myChannel && status === 'connected' && participants.length) out[myChannel] = new Set(participants.map((p) => p.identity))
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]))
 }
 
@@ -84,6 +119,7 @@ export function usePresenceManager() {
   const profile = useSession((s) => s.profile)
   const voiceChannel = useVoice((s) => s.channelId)
   const live = useVoice((s) => s.screenOn)
+  const cam = useVoice((s) => s.camOn)
   const { data: servers } = useServers()
   const { data: friends } = useFriends()
   const { data: dms } = useDMs()
@@ -93,7 +129,7 @@ export function usePresenceManager() {
   const pref = profile?.status_pref ?? 'online'
   const myStatus: Presence | null = pref === 'invisible' ? null : pref === 'online' && idle ? 'idle' : pref
   const meta = useRef<Meta | null>(null)
-  meta.current = myStatus ? { status: myStatus, voice: voiceChannel, live: !!voiceChannel && live } : null
+  meta.current = myStatus ? { status: myStatus, voice: voiceChannel, live: !!voiceChannel && live, cam: !!voiceChannel && cam, ts: Date.now() } : null
 
   // Detecção de inatividade
   useEffect(() => {
@@ -143,7 +179,7 @@ export function usePresenceManager() {
         const flat: Record<string, Meta> = {}
         for (const [k, metas] of Object.entries(raw)) {
           const best = metas.slice().sort((a, b) => RANK[b.status] - RANK[a.status])[0]
-          if (best) flat[k] = { status: best.status, voice: best.voice ?? null, live: !!best.live }
+          if (best) flat[k] = { status: best.status, voice: best.voice ?? null, live: !!best.live, cam: !!best.cam, ts: best.ts }
         }
         usePresenceStore.getState().setTopic(topic, flat)
       })
@@ -155,7 +191,7 @@ export function usePresenceManager() {
   }, [uid, wantedKey])
 
   // Atualiza o que eu publico quando status/voz mudam (ou fica invisível)
-  const metaKey = meta.current ? `${meta.current.status}|${meta.current.voice ?? ''}|${meta.current.live ? 1 : 0}` : 'off'
+  const metaKey = meta.current ? `${meta.current.status}|${meta.current.voice ?? ''}|${meta.current.live ? 1 : 0}|${meta.current.cam ? 1 : 0}` : 'off'
   useEffect(() => {
     for (const { ch, track } of channels.current.values()) {
       if (!track) continue
@@ -163,6 +199,22 @@ export function usePresenceManager() {
       else void ch.untrack()
     }
   }, [metaKey, wantedKey])
+
+  // Batimento: renova o carimbo enquanto estou numa chamada; ao fechar a aba, tenta sair da presença na hora
+  useEffect(() => {
+    const beat = () => {
+      if (!meta.current?.voice) return
+      meta.current = { ...meta.current, ts: Date.now() }
+      for (const { ch, track } of channels.current.values()) if (track) void ch.track(meta.current)
+    }
+    const iv = setInterval(beat, HEARTBEAT_MS)
+    const bye = () => { for (const { ch, track } of channels.current.values()) if (track) void ch.untrack() }
+    window.addEventListener('pagehide', bye)
+    return () => {
+      clearInterval(iv)
+      window.removeEventListener('pagehide', bye)
+    }
+  }, [])
 
   // Limpa tudo ao sair
   useEffect(() => {
@@ -228,5 +280,6 @@ export function useTyping(scope: Scope | null) {
 
 /** Canal de voz em que a pessoa está agora neste servidor (pela presença em tempo real), se houver. */
 export function voiceChannelOf(userId: string, serverId: string): string | null {
-  return usePresenceStore.getState().byTopic[`srv:${serverId}`]?.[userId]?.voice ?? null
+  const m = usePresenceStore.getState().byTopic[`srv:${serverId}`]?.[userId]
+  return fresh(m) ? (m?.voice ?? null) : null
 }

@@ -65,7 +65,13 @@ export class MicChain implements TrackProcessor<Track.Kind.Audio, AudioProcessor
     // contexto próprio a 48 kHz (o RNNoise exige) — independente do contexto compartilhado da LiveKit
     const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' })
     this.ctx = ctx
-    if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
+    if (ctx.state !== 'running') await Promise.race([ctx.resume().catch(() => undefined), new Promise((r) => setTimeout(r, 600))])
+    if (ctx.state !== 'running') {
+      // Safari/iOS não liberam o áudio sem um gesto do usuário: um contexto suspenso enviaria SILÊNCIO. Melhor sem o filtro.
+      await ctx.close().catch(() => undefined)
+      this.ctx = undefined
+      throw new Error('AudioContext suspenso (sem gesto do usuário)')
+    }
     const source = ctx.createMediaStreamSource(new MediaStream([opts.track]))
     const highpass = ctx.createBiquadFilter()
     highpass.type = 'highpass'

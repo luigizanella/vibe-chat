@@ -5,13 +5,13 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import clsx from 'clsx'
-import { HeadphoneOff, Music, BellOff, Check, X, ChevronDown, ChevronRight, Hash, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus } from 'lucide-react'
+import { HeadphoneOff, Music, BellOff, Check, X, ChevronDown, ChevronRight, Hash, Lock, MicOff, Pencil, Plus, Settings, Trash2, UserPlus, Volume2, GripVertical, FolderPlus, Video } from 'lucide-react'
 import { rpc } from '@/lib/supabase'
 import { errorMessage } from '@/lib/errors'
 import { hasPerm } from '@/lib/perms'
 import { qk, useCategories, useChannels, useMembers, useNotifPrefs, usePermCtx, useUnread } from '@/data/queries'
 import { findPref, markChannelsRead, setNotifPref } from '@/data/actions'
-import { useLiveUsers, useVoiceOccupants } from '@/data/presence'
+import { useCamUsers, useLiveUsers, useVoiceOccupants } from '@/data/presence'
 import { MUSIC_BOT_ID, useServerMusic } from '@/data/music'
 import { useVoiceMove } from '@/data/voiceMove'
 import { useUI, toast } from '@/store/ui'
@@ -52,6 +52,7 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
   const localNick = useLocalNick()
   const mv = useVoiceMove(serverId)
   const liveUsers = useLiveUsers()
+  const camUsers = useCamUsers()
   const joinVoice = useVoice((s) => s.join)
   const nav = useNavigate()
   const { data: sessions } = useServerMusic(ch.kind === 'voice' ? serverId : undefined)
@@ -102,6 +103,9 @@ function ChannelItem({ ch, active, unread, mentions, muted, canManage, onOpen, o
                 <span className="min-w-0 flex-1 truncate">{name}</span>
                 {liveUsers.has(uid) && (
                   <span role="button" tabIndex={0} className="shrink-0 cursor-pointer rounded bg-[var(--danger)] px-1 text-[10px] leading-4 font-bold text-white" data-tip="Assistir transmissão" onClick={(e) => { e.stopPropagation(); nav(`/app/s/${serverId}/${ch.id}`); if (voiceChannel === ch.id) useVoice.getState().watch(uid); else void joinVoice({ id: ch.id, serverId, name: ch.name }, uid) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.click() }}>AO VIVO</span>
+                )}
+                {camUsers.has(uid) && (
+                  <span role="button" tabIndex={0} className="grid shrink-0 cursor-pointer place-items-center rounded bg-[var(--bg-tertiary)] p-0.5 text-fg hover:bg-[var(--bg-selected)]" data-tip="Ver câmera" aria-label="Ver câmera" onClick={(e) => { e.stopPropagation(); nav(`/app/s/${serverId}/${ch.id}`); const key = `:cam`; if (voiceChannel === ch.id) useVoice.getState().setFocus(key); else void joinVoice({ id: ch.id, serverId, name: ch.name }).then(() => useVoice.getState().setFocus(key)) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.click() }}><Video size={13} /></span>
                 )}
                 {m?.voice_deafened && <HeadphoneOff size={14} className="text-[var(--danger-text)]" aria-label="Áudio desativado por um moderador" />}
                 {m?.voice_muted ? <MicOff size={14} className="text-[var(--danger-text)]" aria-label="Silenciado por um moderador" /> : live && !live.micOn && <MicOff size={14} className="text-fg-muted" aria-label="Microfone desligado" />}

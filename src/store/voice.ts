@@ -15,8 +15,9 @@ import { useSettings } from './settings'
 import { toast } from './ui'
 import { playSound } from '@/lib/sounds'
 import { MicChain, captureConstraints, type MicChainStatus } from '@/lib/micProcessor'
-import { screenPreset } from '@/lib/screen'
+import { acquireScreenStream, screenPreset, type ScreenAcquire } from '@/lib/screen'
 import { reportMediaError, type MediaKind } from '@/lib/mediaErrors'
+import { diag, isSafari, vozLog } from '@/lib/diag'
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
 
@@ -67,6 +68,9 @@ interface VoiceState {
   setServerFlags: (muted: boolean, deafened: boolean) => void
   join: (t: VoiceTarget, watch?: string) => Promise<void>
   /** Quem você está assistindo (transmissão de tela); só essa é baixada. */
+  /** O navegador bloqueou o áudio da chamada até um clique (Safari/iOS). */
+  audioBlocked: boolean
+  enableAudio: () => Promise<void>
   watching: string | null
   watch: (identity: string | null) => void
   leave: () => Promise<void>
@@ -74,7 +78,7 @@ interface VoiceState {
   toggleMic: () => Promise<void>
   toggleDeafen: () => Promise<void>
   toggleCamera: () => Promise<void>
-  toggleScreen: () => Promise<void>
+  toggleScreen: (pending?: Promise<ScreenAcquire>) => Promise<void>
   setPtt: (active: boolean) => void
   setVolume: (identity: string, v: number) => void
   setFocus: (key: string | null) => void
@@ -354,20 +358,33 @@ export const useVoice = create<VoiceState>((set, get) => {
         track.detach().forEach((el) => el.remove())
         sync()
       })
-      .on(RoomEvent.Reconnecting, () => set({ status: 'reconnecting' }))
+      .on(RoomEvent.Reconnecting, () => {
+        vozLog('reconectando (LiveKit)')
+        set({ status: 'reconnecting' })
+      })
       .on(RoomEvent.Reconnected, () => {
+        vozLog('reconectado')
         set({ status: 'connected', error: null })
         sync()
       })
       .on(RoomEvent.MediaDevicesChanged, () => void checkDevices(room))
       .on(RoomEvent.AudioPlaybackStatusChanged, () => {
         if (!room.canPlaybackAudio) void room.startAudio().catch(() => undefined)
+        set({ audioBlocked: !room.canPlaybackAudio })
       })
       .on(RoomEvent.Disconnected, (reason) => {
         if (get().room !== room) return
+        const reasonName = reason === undefined ? 'desconhecido' : (DisconnectReason[reason] ?? String(reason))
+        diag.lastDisconnect = `${reasonName} · ${new Date().toLocaleTimeString('pt-BR')}`
+        vozLog('desconectado', reasonName)
         track_cleanup()
         stopPing()
         if (userLeft || reason === DisconnectReason.CLIENT_INITIATED) return
+        if (reason === DisconnectReason.DUPLICATE_IDENTITY) {
+          // a mesma conta entrou em outro lugar (outra aba, navegador ou o app): reconectar aqui derrubaria o outro em loop
+          set({ status: 'failed', error: 'Sua conta entrou nesta chamada em outro lugar (outra aba, navegador ou o app). Feche o outro e toque em “Tentar agora” para voltar para cá.', room: null, participants: [] })
+          return
+        }
         if (reason === DisconnectReason.PARTICIPANT_REMOVED && Date.now() < moveUntil) return // movido por moderador: o comando de mover reconecta no destino
         if (reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED) {
           set({ status: 'failed', error: 'Você foi removido da chamada.', room: null, channelId: null, participants: [] })
@@ -459,6 +476,15 @@ export const useVoice = create<VoiceState>((set, get) => {
     micThreshold: 0,
     micChain: null,
     watching: null,
+    audioBlocked: false,
+    enableAudio: async () => {
+      try {
+        await get().room?.startAudio()
+      } catch (e) {
+        vozLog('startAudio falhou', (e as Error).message)
+      }
+      set({ audioBlocked: !get().room?.canPlaybackAudio })
+    },
     serverMuted: false,
     serverDeafened: false,
     setServerFlags: (serverMuted, serverDeafened) => {
@@ -489,20 +515,22 @@ export const useVoice = create<VoiceState>((set, get) => {
       const s = useSettings.getState().settings.voice
       set({ status: 'connecting', error: null, target, channelId: target.id, micMuted: s.joinMuted || s.pttEnabled, deafened: false, focus: null, watching: watch ?? null })
       try {
+        vozLog('entrando', target.name)
         const room = await connectRoom(target)
         set({ status: 'connected' })
+        sync() // mostra todos os participantes na hora, antes de qualquer outra etapa (áudio, microfone)
         startPing()
         playSound('join')
-        try {
-          await room.startAudio()
-        } catch {
-          /* autoplay: será retomado no primeiro clique */
-        }
-        sync()
+        // autoplay (Safari/iOS): se o navegador bloquear o áudio, a tela mostra o botão "Ativar áudio"
+        void room.startAudio().then(() => set({ audioBlocked: !room.canPlaybackAudio }), () => set({ audioBlocked: true }))
+        vozLog('conectado', { participantes: room.remoteParticipants.size + 1 })
         await applyMic()
         applyVolumes()
+        sync()
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Falha ao conectar.'
+        diag.lastError = msg
+        vozLog('falha ao conectar', msg)
         get().room?.disconnect().catch(() => undefined)
         set({ status: 'failed', error: msg, room: null, channelId: null, participants: [] })
         toast.error(msg)
@@ -544,9 +572,9 @@ export const useVoice = create<VoiceState>((set, get) => {
         const room = await connectRoom(target)
         retries = 0
         set({ status: 'connected', error: null })
-        startPing()
-        await room.startAudio().catch(() => undefined)
         sync()
+        startPing()
+        void room.startAudio().then(() => set({ audioBlocked: !room.canPlaybackAudio }), () => set({ audioBlocked: true }))
         await applyMic()
         applyVolumes()
         toast.success('Reconectado à chamada.')
@@ -602,7 +630,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       sync()
     },
 
-    toggleScreen: async () => {
+    toggleScreen: async (pending) => {
       const room = get().room
       if (!room) return
       if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -612,35 +640,47 @@ export const useVoice = create<VoiceState>((set, get) => {
       const lp = room.localParticipant
       const s = useSettings.getState().settings.voice
       if (get().serverMuted && !lp.isScreenShareEnabled) return void toast.error('Você foi silenciado por um moderador e não pode compartilhar a tela agora.')
-      try {
-        if (lp.isScreenShareEnabled) {
+      if (lp.isScreenShareEnabled) {
+        // encerra de verdade a captura (o aviso "compartilhando" do navegador some)
+        for (const src of [Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) lp.getTrackPublication(src)?.track?.mediaStreamTrack.stop()
+        try {
           await lp.setScreenShareEnabled(false)
-        } else {
-          const p = screenPreset(s.screenQuality, s.screenFps)
-          await lp.setScreenShareEnabled(
-            true,
-            {
-              audio: s.screenAudio,
-              resolution: p.resolution,
-              contentHint: p.fps === 60 ? 'motion' : 'detail',
-              selfBrowserSurface: 'exclude',
-              surfaceSwitching: 'include',
-              systemAudio: s.screenAudio ? 'include' : 'exclude',
-            },
-            { screenShareEncoding: { maxBitrate: p.maxBitrate, maxFramerate: p.fps } },
-          )
-          if (s.screenAudio && !lp.getTrackPublication(Track.Source.ScreenShareAudio)) {
-            toast.info(
-              'Tela compartilhada sem áudio do sistema. No seletor, marque "Compartilhar áudio do sistema" (disponível ao compartilhar a tela inteira ou uma aba no Chrome/Edge no Windows).',
-            )
-          }
+        } catch (e) {
+          vozLog('erro ao parar tela', (e as Error).message)
         }
+        sync()
+        return
+      }
+      const p = screenPreset(s.screenQuality, s.screenFps)
+      let stream: MediaStream | undefined
+      try {
+        // se o clique já pediu a captura (pending), usa; senão pede agora (ainda no gesto)
+        const got = await (pending ?? acquireScreenStream(s.screenQuality, s.screenFps, s.screenAudio))
+        stream = got.stream
+        const vt = stream.getVideoTracks()[0]
+        if (!vt) throw Object.assign(new Error('sem vídeo'), { name: 'NotFoundError' })
+        vt.contentHint = p.fps === 60 ? 'motion' : 'detail'
+        vozLog('tela capturada', { ...vt.getSettings(), audio: stream.getAudioTracks().length })
+        vt.addEventListener('ended', () => void (useVoice.getState().screenOn && useVoice.getState().toggleScreen()), { once: true })
+        await lp.publishTrack(vt, {
+          source: Track.Source.ScreenShare,
+          name: 'screen',
+          simulcast: false,
+          screenShareEncoding: { maxBitrate: p.maxBitrate, maxFramerate: p.fps },
+        })
+        const at = stream.getAudioTracks()[0]
+        if (at && s.screenAudio) await lp.publishTrack(at, { source: Track.Source.ScreenShareAudio, name: 'screen-audio' })
+        else if (s.screenAudio) toast.info(isSafari() ? 'O Safari não compartilha o áudio do sistema; só a imagem foi enviada.' : 'Tela compartilhada sem áudio do sistema. No seletor, marque "Compartilhar áudio" (tela inteira ou aba no Chrome/Edge).')
       } catch (e) {
+        stream?.getTracks().forEach((t) => t.stop())
+        const ms = (e as { ms?: number })?.ms
+        const err = e as { name?: string; message?: string }
+        diag.screenError = `${err.name ?? 'Erro'}: ${err.message ?? ''}${ms !== undefined ? ` (após ${Math.round(ms)} ms)` : ''}`
+        vozLog('falha ao compartilhar tela', diag.screenError)
         handleMediaError(e, 'tela')
       }
       sync()
     },
-
     setPtt: (active) => {
       if (get().pttActive === active) return
       set({ pttActive: active })

@@ -166,7 +166,7 @@ function capTiles(tiles: TileSpec[], max: number): { shown: TileSpec[]; more: nu
   return { shown: tiles.filter((t) => keep.has(t.key)), more: tiles.length - (max - 1) }
 }
 export function VoiceStage({ channel, serverId }: { channel: { id: string; name: string; server_id: string }; serverId: string }) {
-  const { channelId, status, error, participants, focus, setFocus, join, retry, target } = useVoice()
+  const { channelId, status, error, participants, focus, setFocus, join, retry, target, audioBlocked, enableAudio } = useVoice()
   const meId = useSession((s) => s.user?.id)
   const { data: members } = useMembers(serverId)
   const occupants = useVoiceOccupants()[channel.id] ?? []
@@ -230,9 +230,19 @@ export function VoiceStage({ channel, serverId }: { channel: { id: string; name:
           {(status === 'failed' || status === 'reconnecting') && <button className="btn btn-sm" onClick={() => void retry()}><RefreshCw size={13} /> Tentar agora</button>}
         </div>
       )}
+      {audioBlocked && status === 'connected' && (
+        <div className="flex items-center justify-center gap-3 bg-[var(--accent)] px-4 py-2 text-sm text-[var(--accent-contrast)]" role="status">
+          O navegador bloqueou o som da chamada.
+          <button className="btn btn-sm" onClick={() => void enableAudio()}><Volume2 size={13} /> Ativar áudio</button>
+        </div>
+      )}
       <div ref={areaRef} className="stage-dark min-h-0 flex-1 overflow-hidden p-2">
         {!participants.length ? (
-          <div className="grid h-full place-items-center text-fg-muted"><Loader2 className="spin" /></div>
+          // nunca tela preta: enquanto a LiveKit não entrega a lista, mostra quem está na sala (presença) com o aviso de conexão
+          <div className="relative h-full w-full">
+            <TileGrid w={area.w} h={area.h} items={(occupants.length ? occupants : meId ? [meId] : []).map((id) => ({ key: id, node: <div className="grid h-full w-full place-items-center rounded-xl bg-[var(--bg-secondary)]"><Avatar path={memberOf(id)?.profile?.avatar_path} name={memberOf(id)?.profile?.display_name ?? '?'} id={id} size={80} /></div> }))} />
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"><span className="flex items-center gap-2 rounded-full bg-black/70 px-4 py-1.5 text-sm text-white"><Loader2 size={14} className="spin" /> {status === 'failed' ? 'Sem conexão com a chamada' : 'Conectando à chamada…'}</span></div>
+          </div>
         ) : spotlight ? (
           (() => {
             const side = area.w >= 820
